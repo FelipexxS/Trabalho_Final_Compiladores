@@ -18,3 +18,5 @@ TurtleScript é uma linguagem de programação simples, projetada para controlar
 
 ### Estrutura do Programa
 Todo programa é delimitado por `inicio` e `fim`.
+
+Membros: Luis Leon, Felipe Silva, José Ronaldo, Raul Santiago.
