@@ -2,7 +2,7 @@
 
 ## Descrição do Projeto
 
-Este projeto consiste no desenvolvimento de um compilador para a **TurtleScript**, uma linguagem didática personalizada, com foco nas etapas de análise léxica, sintática, semântica e geração de código. O objetivo principal é traduzir programas escritos em TurtleScript para scripts Python funcionais que utilizam a biblioteca **Turtle Graphics**, permitindo a simulação visual de comandos de desenho.
+Este projeto consiste no desenvolvimento de um compilador para a **TurtleScript**, uma linguagem didática personalizada, com foco nas etapas de análise léxica, sintática, semântica e geração de código. O objetivo principal é traduzir programas escritos em TurtleScript para scripts Python funcionais que utilizam a biblioteca **Turtle Graphics**, permitindo a simulação visual de comandos de desenho. teste
 
 O desenvolvimento foi realizado em Python, e a implementação seguiu os princípios de construção de compiladores, como discutido em obras de referência como "Engineering a Compiler" de Cooper e Torczon, que aborda desde a estrutura do compilador até técnicas de otimização e representações intermediárias.
 
