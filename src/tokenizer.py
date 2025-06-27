@@ -292,7 +292,6 @@ source_code = """
     fim
     """
 
-
 #Exemplo com retorno de tokens 
 
 tokens = lista_tokens(source_code)
