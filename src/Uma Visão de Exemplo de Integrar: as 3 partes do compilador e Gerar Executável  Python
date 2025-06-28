@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------
+# 1) ANÁLISE SINTÁTICA  →  AST
+# ---------------------------------------------------------------------
+# `tokens` foi produzido anteriormente pelo analisador léxico.
+# O objeto `parser` conhece a gramática da TurtleScript e,
+# quando recebe a lista de tokens, constrói a Árvore de Sintaxe
+# Abstrata (AST).  A AST é a representação hierárquica do programa,
+# livre de detalhes de sintaxe concreta (parênteses, ponto-e-vírgula
+# etc.) e pronta para as fases seguintes do compilador.
+
+ast = parser.parse(tokens)
+
+# ---------------------------------------------------------------------
+# 2) ANÁLISE SEMÂNTICA  →  VERIFICAÇÕES e TIPAGEM
+# ---------------------------------------------------------------------
+# Instanciamos o visitante semântico, que carrega internamente
+# uma TabelaDeSimbolos *vazia* e uma lista de mensagens de erro.
+
+sem = SemanticoVisitor()
+
+# Percorremos a AST.  Cada `visit_<Nodo>`:
+#   • Preenche a Tabela de Símbolos (declarações);
+#   • Verifica uso-antes-da-declaração, tipos em atribuições,
+#     assinaturas de comandos, regras especiais (repita, ir_para…);
+#   • Acumula mensagens em `sem.tabela.erros`, sem interromper a visita.
+
+sem.visit(ast)
+
+# ---------------------------------------------------------------------
+# 3) RELATÓRIO DE ERROS & CONTROLE DE FLUXO
+# ---------------------------------------------------------------------
+# Se algum erro semântico foi registrado, abortamos a compilação
+# antes da geração de código.  `possui_erros()` é um *wrapper*
+# legível que verifica se a lista interna **não** está vazia.
+if sem.tabela.possui_erros():
+    # Exibe todas as mensagens, uma por linha, para o usuário.
+    print("\n".join(sem.tabela.erros))
+    # Saída com código 1 sinaliza a ferramentas externas (make,
+    # CI, IDE) que a compilação falhou por erro de semântica.
+
+    sys.exit(1)              # ⤷ nada de código-alvo será emitido
+else:
+
+    # -----------------------------------------------------------------
+    # 4) GERAÇÃO DE CÓDIGO  →  Python + turtle
+    # -----------------------------------------------------------------
+    # Chegando aqui significa “semântica OK”.
+    # O módulo `gerador` percorre novamente a AST (ou um IR derivado)
+    # e traduz cada nodo para a forma de saída desejada:
+    #     • instruções TurtleScript  →  chamadas turtle.*, loops for…
+    #     • literais e expressões    →  sintaxe Python equivalente
+    #
+    # O resultado típico é um arquivo `.py` autossuficiente que, ao
+    # ser executado, reproduz o desenho especificado pelo programa
+    # fonte.
+
+    gerador.gerar(ast)
