@@ -1,0 +1,12 @@
+# Visão de Integração Parser com Análise Semântica
+
+1. Parser constrói a AST.
+
+2. Chame.
+
+semantico = SemanticoVisitor(tabela_simbolos);
+semantico.visit(ast);
+
+3. Se
+
+semantico.erros: exiba-os. Caso contrário, prossiga para o gerador de código.
