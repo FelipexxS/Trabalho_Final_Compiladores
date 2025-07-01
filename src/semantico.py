@@ -1,175 +1,253 @@
+# ------------------------------------------------------------
+# turtlescript_semantic.py – Infra‑estrutura de análise semântica
+# para a linguagem TurtleScript usando uma AST LINEAR (única tabela)
+# ------------------------------------------------------------
+from __future__ import annotations
+
+# ============================================================
+# 1.  Definições básicas e Tabela de Símbolos
+# ============================================================
+
+class SemanticError(Exception):
+    """Exceção usada para sinalizar erros semânticos graves."""
+    pass
+
+
+class EntradaTabelaSimbolos:
+    """Registro de uma variável na tabela de símbolos."""
+
+    def __init__(self, nome: str, tipo: str):
+        self.nome = nome
+        self.tipo = tipo
+
+    def __repr__(self) -> str:
+        return f"EntradaTabelaSimbolos({self.nome!r}, {self.tipo!r})"
+
+
+class TabelaDeSimbolos:
+    """Implementa uma pilha de escopos (lista de dicionários)."""
+
+    def __init__(self):
+        self._escopos: list[dict[str, EntradaTabelaSimbolos]] = [{}]  # escopo global
+        self.erros: list[str] = []
+
+    # ---------- Escopos ----------
+    def abrir_escopo(self) -> None:
+        self._escopos.append({})
+
+    def fechar_escopo(self) -> None:
+        self._escopos.pop()
+
+    # ---------- Registro / busca ----------
+    def declarar(self, nome: str, tipo: str, linha: int) -> None:
+        escopo_atual = self._escopos[-1]
+        if nome in escopo_atual:
+            self._erro(f"Variável '{nome}' já declarada neste escopo", linha)
+            return
+        escopo_atual[nome] = EntradaTabelaSimbolos(nome, tipo)
+
+    def buscar(self, nome: str, linha: int) -> EntradaTabelaSimbolos | None:
+        for escopo in reversed(self._escopos):
+            if nome in escopo:
+                return escopo[nome]
+        self._erro(f"Variável '{nome}' não declarada", linha)
+        return None  # sinaliza erro, mas permite continuar
+
+    # ---------- Relato de erros ----------
+    def _erro(self, mensagem: str, linha: int) -> None:
+        self.erros.append(f"Linha {linha}: {mensagem}")
+
+    def possui_erros(self) -> bool:
+        return bool(self.erros)
+
+    # ---------- Depuração ----------
+    def __str__(self) -> str:
+        linhas = []
+        for i, esc in enumerate(self._escopos):
+            prefixo = "<global>" if i == 0 else f"<escopo {i}>"
+            for nome, ent in esc.items():
+                linhas.append(f"{prefixo}  {nome}: {ent.tipo}")
+        return "\n".join(linhas) or "(Tabela vazia)"
+
+
+# ============================================================
+# 2.  Representação da AST como uma TABELA ÚNICA
+# ============================================================
+
+AST: list[dict] = []  # cada posição contém um nó (dict)
+
+
+def novo_no(tag: str, filhos: list[int] | None = None, **attrs) -> int:
+    """Cria um nó, armazena na lista global AST e devolve o índice."""
+    idx = len(AST)
+    AST.append({
+        "tag": tag,
+        "filhos": filhos or [],
+        **attrs,
+    })
+    return idx
+
+
+# ============================================================
+# 3.  NodeVisitor genérico para tabela linear
+# ============================================================
+
+class NodeVisitor:
+    """Despacho dinâmico baseado no campo 'tag' do nó."""
+
+    def visit(self, idx: int):
+        no = AST[idx]
+        metodo = getattr(self, f"visit_{no['tag']}", self.generic_visit)
+        return metodo(idx)
+
+    def generic_visit(self, idx: int):
+        raise RuntimeError(f"Nó não suportado: {AST[idx]['tag']}")
+
+
+# ============================================================
+# 4.  Assinaturas de comandos primitivos de TurtleScript
+# ============================================================
+# Exemplo enxuto – adapte conforme sua linguagem.
+ASSINATURAS: dict[str, tuple[list[str], str | None]] = {
+    "avancar": (["inteiro"], None),
+    "definir_cor": (["texto"], None),
+}
+
+
+# ============================================================
+# 5.  SemanticoVisitor adaptado para AST linear
+# ============================================================
+
 class SemanticoVisitor(NodeVisitor):
     """
-    Percorre a Árvore de Sintaxe Abstrata (AST) validando as regras semânticas da
-    linguagem TurtleScript. Cada método `visit_<NomeDoNodo>` é invocado
-    automaticamente pelo modelo *visitor* quando um nodo desse tipo é encontrado.
-    O método deve:
-
-      1. Verificar se o uso do constructo está semanticamente correto
-      2. Registrar erros através de `self.tabela._erro()` sem abortar a execução
-      3. (quase sempre) devolver o *tipo* da sub-árvore para que o pai possa
-         continuar checando compatibilidade de tipos amontoados.
+    Percorre a AST linear validando regras semânticas da linguagem TurtleScript.
+    Cada método `visit_<Tag>` recebe **o índice** do nó na tabela AST.
     """
 
     def __init__(self):
-        # Uma instância de TabelaDeSimbolos — responsável por:
-        # • pilha de escopos          (open / close)
-        # • registro de variáveis     (declarar / buscar)
-        # • coleta de mensagens de erro semântico
-      
         self.tabela = TabelaDeSimbolos()
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # DECLARAÇÃO DE VARIÁVEL
-    # ------------------------------------------------------------------
-  
-    def visit_DeclaracaoVar(self, node):
-        """
-        Nodo produzido pelo parser ao reconhecer algo como:
-            inteiro x;
-        O parser já armazenou:
-            node.tipo_lexema → "inteiro"
-            node.ident_lexema → "x"
-            node.linha        → nº da linha no código-fonte
+    # --------------------------------------------------
+    def visit_DeclaracaoVar(self, idx: int):
+        no = AST[idx]
+        tipo = no["tipo_lexema"]
+        ident = no["ident_lexema"]
+        linha = no["linha"]
+        self.tabela.declarar(ident, tipo, linha)
 
-        A semântica exige:
-          • Inserir 'x' na tabela no *escopo atual*
-          • Sinalizar erro se 'x' já existir neste escopo
-        """
-        tipo = node.tipo_lexema
-        ident = node.ident_lexema
-        self.tabela.declarar(ident, tipo, node.linha)
-
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # USO DE IDENTIFICADOR EM EXPRESSÕES
-    # ------------------------------------------------------------------
-  
-    def visit_Identificador(self, node):
-        """
-        Nodo que representa uma variável aparecendo em uma expressão ou comando.
-        Precisamos validar *uso antes da declaração*.
-
-        Retornamos o tipo encontrado — isso permite que o pai verifique
-        compatibilidade (ex.: atribuição, chamada de comando).
-        """
-        entrada = self.tabela.buscar(node.lexema, node.linha)
+    # --------------------------------------------------
+    def visit_Identificador(self, idx: int):
+        no = AST[idx]
+        lexema = no["lexema"]
+        linha = no["linha"]
+        entrada = self.tabela.buscar(lexema, linha)
         return entrada.tipo if entrada else "indefinido"
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
     # ATRIBUIÇÃO
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
+    def visit_Atribuicao(self, idx: int):
+        no = AST[idx]
+        linha = no["linha"]
+        var_idx, expr_idx = no["filhos"]  # [lhs, rhs]
 
-    def visit_Atribuicao(self, node):
-        """
-        Nodo semelhante a:
-            x = expr;
-        O parser garantiu estrutura sintática, mas agora checamos semântica:
+        tipo_lhs = self.visit(var_idx)
+        tipo_rhs = self.visit(expr_idx)
 
-          1. O lado esquerdo (variável) deve existir → `visit(node.var)`
-          2. O lado direito (expressão) precisa ser avaliado para conhecer seu tipo
-          3. Os tipos devem ser compatíveis segundo _compat()
-        """
-      
-        tipo_lhs = self.visit(node.var)   # Tipo da variável alvo, Left-Hand Side (lado esquerdo). 
-        tipo_rhs = self.visit(node.expr)  # Tipo do valor atribuído, Right-Hand Side (lado direito).
-
-        # Se qualquer lado é "indefinido" já houve erro de variável não declarada,
-        # então só checamos compatibilidade quando ambos são válidos.
-      
         if tipo_lhs != "indefinido" and tipo_rhs != "indefinido":
             if not self._compat(tipo_lhs, tipo_rhs):
                 self.tabela._erro(
                     f"Tipos incompatíveis em atribuição: '{tipo_lhs}' ← '{tipo_rhs}'",
-                    node.linha
+                    linha,
                 )
 
-    # ------------------------------------------------------------------
-    # COMANDO PRIMITIVO DA LINGUAGEM
-    # ------------------------------------------------------------------
-    def visit_Comando(self, node):
-        """
-        Nodo que representa chamadas como:
-            avancar(10);
-            definir_cor("blue");
+    # --------------------------------------------------
+    # COMANDO PRIMITIVO
+    # --------------------------------------------------
+    def visit_Comando(self, idx: int):
+        no = AST[idx]
+        nome = no["nome"]
+        linha = no["linha"]
+        assinatura = ASSINATURAS.get(nome)
+        if assinatura is None:
+            self.tabela._erro(f"Comando desconhecido '{nome}'", linha)
+            return
 
-        Precisamos:
-          • Conhecer a assinatura estática do comando (tabela global ASSINATURAS)
-          • Visitar cada argumento para descobrir seu tipo real
-          • Conferir quantidade e compatibilidade via _checar_assinatura()
-        """
-        assinatura = ASSINATURAS[node.nome]        # p.ex. (["inteiro"], None)
-        tipos_args = [self.visit(arg) for arg in node.args]
-        self._checar_assinatura(node.nome, tipos_args, assinatura, node.linha)
+        tipos_args = [self.visit(i) for i in no["args"]]
+        self._checar_assinatura(nome, tipos_args, assinatura, linha)
 
-    # ------------------------------------------------------------------
-    # BLOCO (ou futuro corpo de função)
-    # ------------------------------------------------------------------
-    def visit_Bloco(self, node):
-        """
-        Nodo que envolve uma lista de instruções, potencialmente delimitando
-        um novo escopo (ex.: corpo do laço `repita`, função futura, etc.).
-
-        Passos:
-          • Empilha um novo dicionário na Tabela de Símbolos
-          • Visita cada instrução, propagando verificações
-          • Desempilha o escopo ao final
-        """
+    # --------------------------------------------------
+    # BLOCO – cria novo escopo
+    # --------------------------------------------------
+    def visit_Bloco(self, idx: int):
+        no = AST[idx]
         self.tabela.abrir_escopo()
-        for stmt in node.stmts:
-            self.visit(stmt)
+        for stmt_idx in no["stmts"]:
+            self.visit(stmt_idx)
         self.tabela.fechar_escopo()
 
-    # ------------------------------------------------------------------
-    # ---------- MÉTODOS AUXILIARES INTERNOS (não visitam AST) ----------
-    # ------------------------------------------------------------------
+    # --------------------------------------------------
+    # ------------------ AUXILIARES --------------------
+    # --------------------------------------------------
     def _compat(self, tipo_lhs: str, tipo_rhs: str) -> bool:
-        """
-        Decide se `tipo_rhs` pode ser atribuído a uma variável de `tipo_lhs`.
-
-        Regras atuais:
-          • Mesmos tipos → OK
-          • Inteiro → Real → OK (promoção implícita)
-          • Qualquer outro caso → Erro
-        """
+        """Regra simples de compatibilidade de tipos."""
         if tipo_lhs == tipo_rhs:
             return True
-        # Inteiro se encaixa em real
         return tipo_lhs == "real" and tipo_rhs == "inteiro"
 
     def _checar_assinatura(
         self,
         nome: str,
         reais: list[str],
-        esperados: tuple[list[str], None],
-        linha: int
-    ):
-        """
-        Valida chamada de comando em dois níveis:
-
-          1. Aridade  – nº de argumentos deve bater.
-          2. Tipagem  – cada argumento conforme assinatura.
-
-        Parâmetros
-        ----------
-        nome       : nome do comando (ex.: 'avancar')
-        reais      : lista dos tipos *avaliados* dos argumentos
-        esperados  : tupla (tipos_esperados, retorno) retirada de ASSINATURAS
-        linha      : nº da linha original (para mensagem de erro)
-        """
+        esperados: tuple[list[str], str | None],
+        linha: int,
+    ) -> None:
         tipos_esp, _ = esperados
-
-        # --- 1. Aridade ---
+        # --- Aridade ---
         if len(reais) != len(tipos_esp):
             self.tabela._erro(
                 f"'{nome}' espera {len(tipos_esp)} argumento(s), recebeu {len(reais)}",
-                linha
+                linha,
             )
-            return  # não siga para check de tipos
-
-        # --- 2. Tipagem ---
-        for i, (t_real, t_esp) in enumerate(zip(reais, tipos_esp), start=1):
+            return
+        # --- Tipos ---
+        for i, (t_real, t_esp) in enumerate(zip(reais, tipos_esp), 1):
             if not self._compat(t_esp, t_real):
                 self.tabela._erro(
                     f"Argumento {i} de '{nome}' deve ser '{t_esp}', não '{t_real}'",
-                    linha
+                    linha,
                 )
+
+
+# ============================================================
+# 6.  Exemplo mínimo de uso (pode ser removido em produção)
+# ============================================================
+
+def _exemplo_demo():
+    """Constrói uma mini‑AST na mão para demonstração."""
+    AST.clear()
+
+    # inteiro x;
+    decl_x = novo_no("DeclaracaoVar", tipo_lexema="inteiro", ident_lexema="x", linha=1)
+
+    # x = 5;
+    ident_x = novo_no("Identificador", lexema="x", linha=2)
+    num_5 = novo_no("Numero", valor=5, linha=2)  # não há verificação de tipo aqui – simplificado
+    atrib = novo_no("Atribuicao", filhos=[ident_x, num_5], linha=2)
+
+    # { bloco }
+    bloco = novo_no("Bloco", stmts=[decl_x, atrib], linha=0)
+
+    sem = SemanticoVisitor()
+    sem.visit(bloco)
+
+    print("Erros encontrados:\n" + "\n".join(sem.tabela.erros) if sem.tabela.possui_erros() else "Sem erros!")
+    print("\nTabela de símbolos:\n", sem.tabela)
+
+
+if __name__ == "__main__":
+    _exemplo_demo()
