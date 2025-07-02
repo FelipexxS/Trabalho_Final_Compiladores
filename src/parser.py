@@ -77,6 +77,8 @@ class Parser:
                 rhs_rules = self.diction[rule[0]]
                 for itr in rhs_rules:
                     indivRes = self.first(itr)
+                    if indivRes is None:
+                        continue  # <-- ignora None
                     if type(indivRes) is list:
                         for i in indivRes:
                             fres.append(i)
@@ -99,6 +101,7 @@ class Parser:
                         return newList
                     fres.append('#')
                     return fres
+        return []  # <-- garante que nunca retorna None
 
     def follow(self, nt):
         solset = set()
@@ -323,12 +326,54 @@ class Parser:
 # Exemplo de uso:
 if __name__ == "__main__":
     rules = [
-        "A -> S B | B",
-        "S -> a | B c | #",
-        "B -> b | d"
+        "S -> inicio B fim",
+        "B -> CMDS",
+        "CMDS -> CMD CMDS | #",
+        "CMD -> AV | REC | GD | GE | IRP | LC | AC | DC | DE | CDF | LP | DECL | REP | ENQ | SE | ATR | DSQ | DSC",
+        "ATR -> ATT ;",
+        "AV -> avancar REL ;",
+        "REC -> recuar REL ;",
+        "GD -> girar_direita REL ;",
+        "GE -> girar_esquerda REL ;",
+        "IRP -> ir_para REL REL ;",
+        "LC -> levantar_caneta ;",
+        "AC -> abaixar_caneta ;",
+        "DC -> definir_cor REL ;",
+        "DE -> definir_espessura REL ;",
+        "CDF -> cor_de_fundo REL ;",
+        "LP -> limpar_tela ;",
+        "DSQ -> desenhar_quadrado REL ;",
+        "DSC -> desenhar_circulo REL ;",
+        "DECL -> var TYPE : ID ;",
+        "TYPE -> NUM | TEXT | BOOL",
+        "ATT -> ID = REL ;",
+        "REP -> repita REL vezes CMDS fim_repita ;",
+        "ENQ -> enquanto REL faca CMDS fim_enquanto ;",
+        "SE -> se REL entao CMDS SE_CONT",
+        "SE_CONT -> senao CMDS fim_se ; | fim_se ;",
+        "REL -> ADD REL'",
+        "REL' -> OP_REL ADD REL' | #",
+        "OP_REL -> == | != | > | < | >= | <=",
+        "ADD -> MUL ADD'",
+        "ADD' -> + MUL ADD' | - MUL ADD' | #",
+        "MUL -> FACTOR MUL'",
+        "MUL' -> * FACTOR MUL' | / FACTOR MUL' | #",
+        "FACTOR -> ( REL ) | ID | NUM | TEXT | BOOL",
+        "ID -> identificador",
+        "NUM -> número_inteiro | número_real",
+        "TEXT -> cadeia_de_texto",
+        "BOOL -> true | false"
     ]
-    nonterm_userdef = ['A', 'S', 'B']
-    term_userdef = ['a', 'c', 'b', 'd']
-    sample_input_string = "b c b"
+    nonterm_userdef = ['S', 'B','CMDS', 'CMD', 'ATR', 'AV', 'REC', 'GD', 'GE', 'IRP', 'LC', 'AC', 'DC', 'DE', 'CDF', 'LP', 'DSQ', 'DSC',
+                       'DECL', 'TYPE', 'ATT', 'REP', 'ENQ', 'SE', 'SE_CONT', 'REL', 'REL\'', 'OP_REL', 'ADD', 'ADD\'', 'MUL', 'MUL\'', 'FACTOR', 'ID', 'NUM', 'TEXT', 'BOOL']
+    term_userdef = [
+        'inicio', 'fim', 'avancar', 'recuar', 'girar_direita', 'girar_esquerda', 'ir_para', 'levantar_caneta',
+        'abaixar_caneta', 'definir_cor', 'definir_espessura', 'cor_de_fundo', 'limpar_tela', 'desenhar_quadrado',
+        'desenhar_circulo', 'var', '=', ';', ':', ',', 'repita', 'vezes', 'fim_repita',
+        'enquanto', 'faca', 'fim_enquanto', 'se', 'entao', 'senao', 'fim_se', '#',
+        '+', '-', '*', '/', '(', ')', '<=', '<', '>=', '>', '==', '!=', 'identificador', 'cadeia_de_texto',
+        'número_inteiro', 'número_real', 'true', 'false'
+    ]
+    sample_input_string = "inicio avancar número_inteiro ; recuar número_inteiro ; girar_direita número_inteiro ; levantar_caneta ; abaixar_caneta ; definir_cor cadeia_de_texto ; limpar_tela ; desenhar_quadrado número_inteiro ; fim"
     parser = Parser(rules, nonterm_userdef, term_userdef, sample_input_string)
     parser.run()
