@@ -1,6 +1,6 @@
 """turtlescript_semantic_ast_dict.py
 --------------------------------------------------
-Versão reformulada do analisador semântico para TurtleScript.
+Versão atualizada do analisador semântico para TurtleScript.
 Agora ele recebe, do parser, uma AST **inteiramente** formada por
 objetos‐dicionário aninhados (sem índices numéricos globais).
 Cada nó possui:
@@ -10,6 +10,10 @@ Além disso, cada subtipo traz campos específicos (lexema, linha, etc.)
  
 O núcleo de verificação semântica permanece o mesmo, mas todo o
 código foi refatorado para operar diretamente sobre esses dicionários.
+--------------------------------------------------
+Com a adição do comando primitivo 'ir_para' que deve
+receber exatamente **dois argumentos inteiros** como solicitado no
+documento 'Projeto Final Compiladores 2025 1' .
 """
 
 from __future__ import annotations
@@ -42,9 +46,6 @@ class EntradaTabelaSimbolos:
         self.tipos_params = tipos_params or []
         self.tipo_retorno = tipo_retorno
 
-    # ------------------------------------------------------------
-    # Representação amigável para depuração
-    # ------------------------------------------------------------
     def __repr__(self) -> str:  # pragma: no cover
         if self.categoria == "funcao":
             return f"Funcao({self.nome}, params={self.tipos_params}, ret={self.tipo_retorno})"
@@ -128,7 +129,7 @@ class TabelaDeSimbolos:
 
 
 # ================================================================
-# 2. NodeVisitor genérico (agora recebe o próprio nó‑dicionário)
+# 2. NodeVisitor genérico
 # ================================================================
 
 class NodeVisitor:
@@ -143,12 +144,13 @@ class NodeVisitor:
 
 
 # ================================================================
-# 3. Assinaturas de comandos primitivos (inalterado)
+# 3. Assinaturas de comandos primitivos
 # ================================================================
 ASSINATURAS_PRIMITIVAS: Dict[str, Tuple[List[str], Optional[str]]] = {
     "avancar": (["inteiro"], None),
     "definir_cor": (["texto"], None),
-    "imprimir": (["qualquer"], None),  # aceita qualquer tipo
+    "imprimir": (["qualquer"], None),      # aceita qualquer tipo
+    "ir_para": (["inteiro", "inteiro"], None),  # novo comando
 }
 
 
@@ -307,7 +309,6 @@ class SemanticoVisitor(NodeVisitor):
                 f"Condição do 'se' deve ser 'booleano', mas é '{tipo_cond}'", linha
             )
         self.visit(then_node)
-        # opcional else
         if len(node["filhos"]) > 2:
             self.visit(node["filhos"][2])
 
@@ -322,7 +323,6 @@ class SemanticoVisitor(NodeVisitor):
         self.visit(corpo_node)
 
     def visit_Repita(self, node):
-        # Regra: literal inteiro obrigatório
         linha = node["linha"]
         vezes_node, corpo_node = node["filhos"]
         if not (vezes_node.get("tag") == "Literal" and vezes_node.get("tipo") == "inteiro"):
@@ -338,13 +338,11 @@ class SemanticoVisitor(NodeVisitor):
         nome, linha = node["nome"], node["linha"]
         tipos_args = [self.visit(arg) for arg in node.get("filhos", [])]
 
-        # Comando primitivo?
         if nome in ASSINATURAS_PRIMITIVAS:
             assinatura = ASSINATURAS_PRIMITIVAS[nome]
             self._checar_assinatura(nome, tipos_args, assinatura, linha)
             return assinatura[1]
 
-        # Procura função declarada
         entrada = self.tabela.buscar(nome, linha)
         if not entrada:
             return "indefinido"
@@ -408,7 +406,7 @@ class SemanticoVisitor(NodeVisitor):
             return
         for i, (t_real, t_esp) in enumerate(zip(reais, tipos_esp), 1):
             if "indefinido" in (t_real, t_esp):
-                continue  # erro já reportado
+                continue
             if not self._compat(t_esp, t_real):
                 self.tabela._erro(
                     f"Arg {i} de '{nome}': esperado '{t_esp}', recebeu '{t_real}'",
@@ -417,21 +415,18 @@ class SemanticoVisitor(NodeVisitor):
 
 
 # ================================================================
-# 6. Função utilitária para o pipeline
+# 6. Função utilitária
 # ================================================================
-
 def analisar_semantica(ast_raiz: Dict[str, Any]) -> List[str]:
-    """Executa o analisador e devolve a lista de erros (vazia se OK)."""
     sem = SemanticoVisitor()
     sem.visit(ast_raiz)
     return sem.tabela.erros
 
 
 # ================================================================
-# 7. Pequeno teste manual (pode remover em produção)
+# 7. Teste manual
 # ================================================================
 if __name__ == "__main__":  # pragma: no cover
-    # Demo mínimo: var inteiro x = 5 + 3;
     ast_demo = {
         "tag": "Bloco",
         "filhos": [
@@ -451,7 +446,16 @@ if __name__ == "__main__":  # pragma: no cover
                         ],
                     }
                 ],
-            }
+            },
+            {
+                "tag": "FuncaoCall",
+                "nome": "ir_para",
+                "linha": 2,
+                "filhos": [
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 10, "linha": 2},
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 20, "linha": 2},
+                ],
+            },
         ],
     }
     erros = analisar_semantica(ast_demo)
