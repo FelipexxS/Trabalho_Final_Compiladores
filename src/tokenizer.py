@@ -265,7 +265,7 @@ def lista_tokens(source_code):
         classes_gram.append(token.type.name)
         token = tokenizer.obter_next_token()
     
-    return classes_gram
+    return " ".join(classes_gram)
 
 
 
@@ -297,3 +297,4 @@ source_code = """
 tokens = lista_tokens(source_code)
 
 
+print(tokens)
