@@ -323,8 +323,97 @@ class Parser:
         else:
             print("\nNo input String detected")
 
+class ASTNode:
+
+    def __init__(self, tag, linha, **kwargs):
+        self.tag = tag
+        self.linha = linha
+        self.children = []
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+    def to_dict(self):
+        base = {"tag": self.tag, "linha": self.linha}
+        base.update({k: v for k, v in self.__dict__.items() if k not in ["tag", "linha", "children"]})
+        if self.children:
+            base["filhos"] = [child.to_dict() for child in self.children]
+        return base
+
+
+class ASTParser(Parser):
+    def init(self, rules, nonterm_userdef, term_userdef, sample_input_string=None):
+        super().init(rules, nonterm_userdef, term_userdef, sample_input_string)
+        self.input_tokens = []
+        self.current_token_index = 0
+
+    def next_token(self):
+        if self.current_token_index < len(self.input_tokens):
+            tok = self.input_tokens[self.current_token_index]
+            self.current_token_index += 1
+            return tok
+        return ('$','EOF')
+
+    def peek_token(self):
+        if self.current_token_index < len(self.input_tokens):
+            return self.input_tokens[self.current_token_index]
+        return ('$','EOF')
+
+    def parse_with_ast(self, parsing_table, grammarll1, table_term_list, input_string):
+        if not grammarll1:
+            raise ValueError("Grammar is not LL(1)")
+
+        self.input_tokens = [(token, idx+1) for idx, token in enumerate(input_string.split())] + [('$', -1)]
+        self.current_token_index = 0
+
+        stack = [self.start_symbol]
+        root = ASTNode("Bloco", 1)
+        node_stack = [root]
+
+        while stack:
+            top = stack.pop(0)
+            node = node_stack.pop(0)
+            tok, linha = self.peek_token()
+
+            # Primeiramente, tratamos o símbolo de epsilon ('#'), que não consome nenhum token de entrada
+            if top == '#':
+                # ε -> não precisa casar com nada da entrada
+                continue
+            elif top in self.term_userdef:
+                if top == tok:
+                    node_stack.append(ASTNode(top, linha))
+                    self.next_token()
+                else:
+                    raise SyntaxError(f"Esperado {top}, mas encontrou {tok} na linha {linha}")
+            else:
+                x = list(self.diction.keys()).index(top)
+                y = table_term_list.index(tok)
+                rule = parsing_table[x][y]
+
+                if rule == '':
+                    raise SyntaxError(f"Erro de sintaxe com token {tok} na linha {linha}")
+
+                lhs, rhs = rule.split("->")
+                # Removemos qualquer ocorrência de '#' para não empilhar epsilons
+                rhs_symbols_full = rhs.strip().split()
+                rhs_symbols = [sym for sym in rhs_symbols_full if sym != '#']
+
+                children_nodes = [ASTNode(sym, linha) for sym in rhs_symbols]
+                node.children.extend(children_nodes)
+
+                # Empilha os símbolos da produção (sem '#') mantendo a ordem correta
+                stack = rhs_symbols + stack
+                node_stack = children_nodes + node_stack
+
+        return root.to_dict()
+
+
+
 # Exemplo de uso:
 if __name__ == "__main__":
+
+    
+
+
     rules = [
         "S -> inicio B fim",
         "B -> CMDS",
@@ -375,5 +464,11 @@ if __name__ == "__main__":
         'número_inteiro', 'número_real', 'true', 'false'
     ]
     sample_input_string = "inicio avancar número_inteiro ; recuar número_inteiro ; girar_direita número_inteiro ; levantar_caneta ; abaixar_caneta ; definir_cor cadeia_de_texto ; limpar_tela ; desenhar_quadrado número_inteiro ; fim"
-    parser = Parser(rules, nonterm_userdef, term_userdef, sample_input_string)
-    parser.run()
+     # Para usar: substitua parser.run() por:
+    parser = ASTParser(rules, nonterm_userdef, term_userdef, sample_input_string)
+    parser.computeAllFirsts()
+    parser.start_symbol = list(parser.diction.keys())[0]
+    parser.computeAllFollows()
+    table, result, tab_terms = parser.createParseTable()
+    ast_dict = parser.parse_with_ast(table, result, tab_terms, parser.sample_input_string)
+    print(ast_dict)  # Já é um dicionário Python pronto para uso
