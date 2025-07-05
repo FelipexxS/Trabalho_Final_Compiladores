@@ -426,39 +426,102 @@ def analisar_semantica(ast_raiz: Dict[str, Any]) -> List[str]:
 # ================================================================
 # 7. Teste manual
 # ================================================================
+
+"""
+
 if __name__ == "__main__":  # pragma: no cover
     ast_demo = {
         "tag": "Bloco",
         "filhos": [
+            # 1. ERRO DE ESCOPO: uso de variável não declarada
+            {
+                "tag": "Atribuicao",
+                "linha": 1,
+                "filhos": [
+                    {"tag": "Identificador", "lexema": "x", "linha": 1},
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 10, "linha": 1},
+                ],
+            },
+    
+            # 2. ERRO DE DECLARAÇÃO: redeclaração da mesma variável
             {
                 "tag": "DeclaracaoVar",
                 "tipo": "inteiro",
-                "ident": "x",
-                "linha": 1,
+                "ident": "a",
+                "linha": 2,
+            },
+            {
+                "tag": "DeclaracaoVar",
+                "tipo": "texto",
+                "ident": "a",
+                "linha": 3,
+            },
+    
+            # 3. ERRO DE TIPAGEM: tipo incompatível em atribuição
+            {
+                "tag": "DeclaracaoVar",
+                "tipo": "inteiro",
+                "ident": "b",
+                "linha": 4,
                 "filhos": [
-                    {
-                        "tag": "ExprBinaria",
-                        "op": "+",
-                        "linha": 1,
-                        "filhos": [
-                            {"tag": "Literal", "tipo": "inteiro", "valor": 5, "linha": 1},
-                            {"tag": "Literal", "tipo": "inteiro", "valor": 3, "linha": 1},
-                        ],
-                    }
+                    {"tag": "Literal", "tipo": "texto", "valor": "abc", "linha": 4}
                 ],
             },
+    
+            # 4. ERRO DE CHAMADA DE FUNÇÃO: número errado de argumentos em 'ir_para'
             {
                 "tag": "FuncaoCall",
                 "nome": "ir_para",
-                "linha": 2,
+                "linha": 5,
                 "filhos": [
-                    {"tag": "Literal", "tipo": "inteiro", "valor": 10, "linha": 2},
-                    {"tag": "Literal", "tipo": "inteiro", "valor": 20, "linha": 2},
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 100, "linha": 5}
                 ],
+            },
+    
+            # 5. ERRO DE CHAMADA DE FUNÇÃO: tipo de argumento errado para 'definir_cor'
+            {
+                "tag": "FuncaoCall",
+                "nome": "definir_cor",
+                "linha": 6,
+                "filhos": [
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 255, "linha": 6}
+                ],
+            },
+    
+            # 6. ERRO EM ESTRUTURA DE CONTROLE: condição de 'se' com tipo inválido
+            {
+                "tag": "If",
+                "linha": 7,
+                "filhos": [
+                    {"tag": "Literal", "tipo": "inteiro", "valor": 1, "linha": 7},
+                    {"tag": "Bloco", "filhos": []}
+                ],
+            },
+    
+            # 7. ERRO EM ESTRUTURA DE CONTROLE: condição de 'enquanto' com tipo inválido
+            {
+                "tag": "Enquanto",
+                "linha": 8,
+                "filhos": [
+                    {"tag": "Literal", "tipo": "texto", "valor": "loop", "linha": 8},
+                    {"tag": "Bloco", "filhos": []}
+                ],
+            },
+    
+            # 8. ERRO EM REPITA: expressão que não é literal inteiro
+            {
+                "tag": "Repita",
+                "linha": 9,
+                "filhos": [
+                    {"tag": "Identificador", "lexema": "a", "linha": 9},
+                    {"tag": "Bloco", "filhos": []}
+                ]
             },
         ],
     }
+
     erros = analisar_semantica(ast_demo)
     print("Erros:" if erros else "Sem erros.")
     for e in erros:
         print(" -", e)
+"""
