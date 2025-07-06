@@ -1,21 +1,3 @@
-"""turtlescript_semantic_ast_dict.py
---------------------------------------------------
-Versão atualizada do analisador semântico para TurtleScript.
-Agora ele recebe, do parser, uma AST **inteiramente** formada por
-objetos‐dicionário aninhados (sem índices numéricos globais).
-Cada nó possui:
-    tag      – string com o tipo do nó (e.g. "Identificador")
-    filhos   – *lista* de nós‑filhos (pode estar ausente ou vazia)
-Além disso, cada subtipo traz campos específicos (lexema, linha, etc.)
- 
-O núcleo de verificação semântica permanece o mesmo, mas todo o
-código foi refatorado para operar diretamente sobre esses dicionários.
---------------------------------------------------
-Com a adição do comando primitivo 'ir_para' que deve
-receber exatamente **dois argumentos inteiros** como solicitado no
-documento 'Projeto Final Compiladores 2025 1' .
-"""
-
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Optional
 
