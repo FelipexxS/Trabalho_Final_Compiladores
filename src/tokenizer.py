@@ -93,8 +93,10 @@ class Tokenizer:
             "inicio": TokenType.INICIO,
             "fim": TokenType.FIM,
             "var": TokenType.VAR,
+            "número_inteiro": TokenType.INTEIRO,
             "inteiro": TokenType.INTEIRO,
             "texto": TokenType.TEXTO,
+            "número_real": TokenType.REAL,
             "real": TokenType.REAL,
             "logico": TokenType.LOGICO,
             "avancar": TokenType.AVANCAR,
@@ -261,17 +263,35 @@ def lista_tokens(source_code):
     
     token = tokenizer.obter_next_token()
 
+    # Mapeamento de tokens pontuação/operadores para usar o literal (caractere) em vez do nome
+    literal_tokens = {
+        TokenType.ATRIBUICAO,
+        TokenType.DOIS_PONTOS,
+        TokenType.PONTO_VIRGULA,
+        TokenType.VIRGULA,
+        TokenType.SOMA,
+        TokenType.SUBTRACAO,
+        TokenType.MULTIPLICACAO,
+        TokenType.DIVISAO,
+        TokenType.RESTO,
+        TokenType.IGUAL,
+        TokenType.MENOR,
+        TokenType.MAIOR,
+        TokenType.PARENTESE_ESQ,
+        TokenType.PARENTESE_DIR,
+    }
+
     while token.type != TokenType.EOF:
-        classes_gram.append(token.type.name)
+        if token.type in literal_tokens:
+            classes_gram.append(str(token.literal))  # usa o caractere/literal do próprio token
+        else:
+            classes_gram.append(token.type.name.lower())  # usa o nome da classe gramatical
         token = tokenizer.obter_next_token()
     
     return " ".join(classes_gram)
 
 
-
-#Exemplo de código
-
-source_code = """
+code = """
     inicio
         var inteiro: lado;
         var texto: cor;
@@ -292,9 +312,12 @@ source_code = """
     fim
     """
 
-#Exemplo com retorno de tokens 
-
-tokens = lista_tokens(source_code)
-
+tokens = lista_tokens(code)
 
 print(tokens)
+
+
+
+
+
+
