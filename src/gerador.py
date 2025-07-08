@@ -1,4 +1,5 @@
 from utils import NodeVisitor
+from typing import List, Dict, Any
 
 class GeradorCodigoVisitor(NodeVisitor):
   """
@@ -20,8 +21,6 @@ class GeradorCodigoVisitor(NodeVisitor):
       "definir_espessura": "turtle.pensize",
       "cor_de_fundo": "turtle.bgcolor",
       "limpar_tela": "turtle.clear",
-      "desenhar_quadrado": "desenhar_quadrado",
-      "desenhar_circulo": "desenhar_circulo"
     }
     
   def gerar_codigo(self, ast_raiz: Dict[str, Any]) -> str:
@@ -77,7 +76,7 @@ class GeradorCodigoVisitor(NodeVisitor):
   def visit_Atribuicao(self, node: Dict[str, Any]):
     var_node, expr_node = node["filhos"]
     nome_var = self.visit(var_node)
-    valor_expr = self.visit(var_node)
+    valor_expr = self.visit(expr_node)
     self._add_linha(f"{nome_var} = {valor_expr}")
   
   def visit_ExprBinaria(self, node: Dict[str, Any]):
@@ -101,12 +100,27 @@ class GeradorCodigoVisitor(NodeVisitor):
   def visit_FuncaoCall(self, node: Dict[str, Any]):
     nome_funcao = node["nome"]
     
-    if nome_funcao in self.mapa_comandos:
-      nome_turtle = self.mapa_comandos[nome_funcao]
+    if nome_funcao in self.mapa_comandos_turtle:
+      nome_turtle = self.mapa_comandos_turtle[nome_funcao]
       args = [str(self.visit(arg)) for arg in node.get("filhos", [])]
       self._add_linha(f"{nome_turtle}({', '.join(args)})")
     else:
-      pass
+      # Entende que é uma função definida pelo usuário
+      args = [str(self.visit(arg)) for arg in node.get("filhos", [])]
+      self._add_linha(f"{nome_funcao}({', '.join(args)})")
+  
+  def visit_FuncaoDecl(self, node: Dict[str, Any]):
+    nome = node["nome"]
+    
+    params_info = node.get("params", [])
+    nomes_params = [p["nome"] for p in params_info]
+    corpo_node = node["filhos"][0]
+    
+    self._add_linha(f"def {nome}({', '.join(nomes_params)}):")
+    self.indent_level += 1
+    self.visit(corpo_node)
+    self.indent_level -= 1
+    self._add_linha("")
   
   def visit_Repita(self, node: Dict[str, Any]):
     vezes_node, corpo_node = node["filhos"]
@@ -117,7 +131,7 @@ class GeradorCodigoVisitor(NodeVisitor):
     self.visit(corpo_node)
     self.indent_level -= 1
 
-  def visit_se(self, node: Dict[str, Any]):
+  def visit_If(self, node: Dict[str, Any]):
     filhos = node["filhos"]
     cond_node, then_node = filhos[0], filhos[1]
     

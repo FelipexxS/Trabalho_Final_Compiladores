@@ -1,3 +1,4 @@
+from typing import Dict, Any
 class NodeVisitor:
     """Classe base para percorrer recursivamente uma AST de dicionários."""
 
