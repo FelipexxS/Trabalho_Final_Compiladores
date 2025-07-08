@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Optional
+from utils import NodeVisitor
+
 
 # ================================================================
 # 1. Exceções e Tabela de Símbolos
@@ -109,24 +111,8 @@ class TabelaDeSimbolos:
                 linhas.append(f"{prefixo:12} {nome}: {ent!r}")
         return "\n".join(linhas) or "(Tabela vazia)"
 
-
 # ================================================================
-# 2. NodeVisitor genérico
-# ================================================================
-
-class NodeVisitor:
-    """Classe base para percorrer recursivamente uma AST de dicionários."""
-
-    def visit(self, node: Dict[str, Any]):
-        metodo = getattr(self, f"visit_{node['tag']}", self.generic_visit)
-        return metodo(node)
-
-    def generic_visit(self, node: Dict[str, Any]):  # pragma: no cover
-        raise RuntimeError(f"Nó não suportado: {node['tag']}")
-
-
-# ================================================================
-# 3. Assinaturas de comandos primitivos
+# 2. Assinaturas de comandos primitivos
 # ================================================================
 ASSINATURAS_PRIMITIVAS: Dict[str, Tuple[List[str], Optional[str]]] = {
     "avancar": (["inteiro"], None),
@@ -137,7 +123,7 @@ ASSINATURAS_PRIMITIVAS: Dict[str, Tuple[List[str], Optional[str]]] = {
 
 
 # ================================================================
-# 4. SemanticoVisitor – varredura e verificação
+# 3. SemanticoVisitor – varredura e verificação
 # ================================================================
 
 class SemanticoVisitor(NodeVisitor):
@@ -362,7 +348,7 @@ class SemanticoVisitor(NodeVisitor):
                 )
 
     # ============================================================
-    # 5. Auxiliares de tipagem
+    # 4. Auxiliares de tipagem
     # ============================================================
     @staticmethod
     def _compat(tipo_lhs: str, tipo_rhs: str) -> bool:
@@ -397,7 +383,7 @@ class SemanticoVisitor(NodeVisitor):
 
 
 # ================================================================
-# 6. Função utilitária
+# 5. Função utilitária
 # ================================================================
 def analisar_semantica(ast_raiz: Dict[str, Any]) -> List[str]:
     sem = SemanticoVisitor()
@@ -406,5 +392,5 @@ def analisar_semantica(ast_raiz: Dict[str, Any]) -> List[str]:
 
 
 # ================================================================
-# 7. Teste manual: Observação, eu retirei pra evitar problema no Pull Request
+# 6. Teste manual: Observação, eu retirei pra evitar problema no Pull Request
 # ================================================================
