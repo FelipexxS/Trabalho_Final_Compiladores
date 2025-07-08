@@ -1,3 +1,6 @@
+from tokenizer import lista_tokens
+
+
 class Parser:
     def __init__(self, rules, nonterm_userdef, term_userdef, sample_input_string=None):
         self.rules = rules
@@ -434,8 +437,8 @@ if __name__ == "__main__":
         "DSQ -> desenhar_quadrado REL ;",
         "DSC -> desenhar_circulo REL ;",
         "DECL -> var TYPE : ID ;",
-        "TYPE -> NUM | TEXT | BOOL",
-        "ATT -> ID = REL ;",
+        "TYPE -> inteiro | texto | real | logico",
+        "ATT -> ID = REL",
         "REP -> repita REL vezes CMDS fim_repita ;",
         "ENQ -> enquanto REL faca CMDS fim_enquanto ;",
         "SE -> se REL entao CMDS SE_CONT",
@@ -449,21 +452,43 @@ if __name__ == "__main__":
         "MUL' -> * FACTOR MUL' | / FACTOR MUL' | #",
         "FACTOR -> ( REL ) | ID | NUM | TEXT | BOOL",
         "ID -> identificador",
-        "NUM -> número_inteiro | número_real",
-        "TEXT -> cadeia_de_texto",
-        "BOOL -> true | false"
+        "NUM -> numero_int | numero_real",
+        "TEXT -> literal_texto",
+        "BOOL -> verdadeiro | falso"
     ]
     nonterm_userdef = ['S', 'B','CMDS', 'CMD', 'ATR', 'AV', 'REC', 'GD', 'GE', 'IRP', 'LC', 'AC', 'DC', 'DE', 'CDF', 'LP', 'DSQ', 'DSC',
                        'DECL', 'TYPE', 'ATT', 'REP', 'ENQ', 'SE', 'SE_CONT', 'REL', 'REL\'', 'OP_REL', 'ADD', 'ADD\'', 'MUL', 'MUL\'', 'FACTOR', 'ID', 'NUM', 'TEXT', 'BOOL']
     term_userdef = [
         'inicio', 'fim', 'avancar', 'recuar', 'girar_direita', 'girar_esquerda', 'ir_para', 'levantar_caneta',
         'abaixar_caneta', 'definir_cor', 'definir_espessura', 'cor_de_fundo', 'limpar_tela', 'desenhar_quadrado',
-        'desenhar_circulo', 'var', '=', ';', ':', ',', 'repita', 'vezes', 'fim_repita',
+        'desenhar_circulo', 'var', 'inteiro', 'texto', 'real', 'logico', '=', ';', ':', ',', 'repita', 'vezes', 'fim_repita',
         'enquanto', 'faca', 'fim_enquanto', 'se', 'entao', 'senao', 'fim_se', '#',
-        '+', '-', '*', '/', '(', ')', '<=', '<', '>=', '>', '==', '!=', 'identificador', 'cadeia_de_texto',
-        'número_inteiro', 'número_real', 'true', 'false'
+        '+', '-', '*', '/', '(', ')', '<=', '<', '>=', '>', '==', '!=', 'identificador', 'literal_texto',
+        'numero_int', 'numero_real', 'verdadeiro', 'falso'
     ]
-    sample_input_string = "inicio avancar número_inteiro ; recuar número_inteiro ; girar_direita número_inteiro ; levantar_caneta ; abaixar_caneta ; definir_cor cadeia_de_texto ; limpar_tela ; desenhar_quadrado número_inteiro ; fim"
+    
+    code = source_code = """
+    inicio
+        var inteiro: lado;
+        var texto: cor;
+
+        lado = 5;
+        cor_de_fundo "black";
+        definir_espessura 2;
+
+        // Laço para desenhar a espiral
+        repita 50 vezes
+            definir_cor "cyan"; // Muda a cor da linha a cada iteração
+            
+            avancar lado;
+            girar_direita 90;
+
+            lado = lado + 5;
+        fim_repita;
+    fim
+    """
+    
+    sample_input_string = lista_tokens(code)
      # Para usar: substitua parser.run() por:
     parser = ASTParser(rules, nonterm_userdef, term_userdef, sample_input_string)
     parser.computeAllFirsts()
