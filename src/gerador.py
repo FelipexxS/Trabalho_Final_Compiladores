@@ -21,6 +21,8 @@ class GeradorCodigoVisitor(NodeVisitor):
       "definir_espessura": "turtle.pensize",
       "cor_de_fundo": "turtle.bgcolor",
       "limpar_tela": "turtle.clear",
+      "desenhar_quadrado": "turtle.square",
+      "desenhar_circulo": "turtle.circle",
     }
     
   def gerar_codigo(self, ast_raiz: Dict[str, Any]) -> str:
@@ -31,12 +33,12 @@ class GeradorCodigoVisitor(NodeVisitor):
       "import turtle",
       "import math",
       "",
-      "tela = turtle.screen()",
+      "tela = turtle.Turtle()",
       "turtle.speed('fast')",
       "",
     ]
     self.visit(ast_raiz)
-    self.codigo.append("\ntela.exitonclick()")
+    self.codigo.append("\nturtle.done()")
     return "\n".join(self.codigo)
   
   def _indentador(self) -> str:
@@ -97,10 +99,40 @@ class GeradorCodigoVisitor(NodeVisitor):
       return "True" if valor == "verdadeiro" else "False"
     return str(valor)
   
+  def visit_Desenhar_Quadrado(self, node: Dict[str, Any]):
+    tamanho = self.visit(node["filhos"][0])
+    lado = self.visit(node["filhos"][1])
+    cor = self.visit(node["filhos"][2])
+    
+    self._add_linha(f"tela.color({cor})")
+    self._add_linha(f"tela.begin_fill()")
+    for _ in range(3):
+      self._add_linha(f"tela.forward({tamanho})")
+      self._add_linha(f"tela.right({lado})")
+    self._add_linha(f"tela.forward({tamanho})")
+    self._add_linha(f"tela.end_fill()")
+  
+  def visit_Desenhar_Circulo(self, node: Dict[str, Any]):
+    raio = self.visit(node["filhos"][0])
+    cor_de_fundo = self.visit(node["filhos"][1])
+    cor_da_borda = self.visit(node["filhos"][2])
+    
+    self._add_linha(f"tela.color({cor_da_borda}, {cor_de_fundo})")
+    self._add_linha(f"tela.begin_fill()")
+    self._add_linha(f"tela.circle({raio})")
+    self._add_linha(f"tela.end_fill()")
+  
   def visit_FuncaoCall(self, node: Dict[str, Any]):
     nome_funcao = node["nome"]
     
     if nome_funcao in self.mapa_comandos_turtle:
+      if nome_funcao == "desenhar_quadrado":
+        self.visit_Desenhar_Quadrado(node)
+        return
+      if nome_funcao == "desenhar_circulo":
+        self.visit_Desenhar_Circulo(node)
+        return
+
       nome_turtle = self.mapa_comandos_turtle[nome_funcao]
       args = [str(self.visit(arg)) for arg in node.get("filhos", [])]
       self._add_linha(f"{nome_turtle}({', '.join(args)})")

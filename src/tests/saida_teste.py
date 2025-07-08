@@ -1,16 +1,22 @@
 import turtle
 import math
 
-tela = turtle.screen()
+tela = turtle.Turtle()
 turtle.speed('fast')
 
 lado = 0
 lado = 10
 turtle.color("cyan")
 turtle.bgcolor("black")
-for _ in range(50):
-    turtle.forward(lado)
-    turtle.right(91)
-    lado = lado + 5
+tela.color("cyan")
+tela.begin_fill()
+tela.forward(100)
+tela.right(90)
+tela.forward(100)
+tela.right(90)
+tela.forward(100)
+tela.right(90)
+tela.forward(100)
+tela.end_fill()
 
-tela.exitonclick()
+turtle.done()

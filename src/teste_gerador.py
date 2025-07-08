@@ -52,50 +52,15 @@ ast_exemplo = {
             ]
         },
         {
-            "tag": "Repita",
-            "linha": 8,
+            "tag": "FuncaoCall",
+            "linha": 7,
+            "nome": "desenhar_quadrado",
             "filhos": [
-                {"tag": "Literal", "linha": 8, "tipo": "inteiro", "valor": 50},
-                {
-                    "tag": "Bloco",
-                    "linha": 8,
-                    "filhos": [
-                        {
-                            "tag": "FuncaoCall",
-                            "linha": 9,
-                            "nome": "avancar",
-                            "filhos": [
-                                {"tag": "Identificador", "linha": 9, "lexema": "lado"}
-                            ]
-                        },
-                        {
-                            "tag": "FuncaoCall",
-                            "linha": 10,
-                            "nome": "girar_direita",
-                            "filhos": [
-                                {"tag": "Literal", "linha": 10, "tipo": "inteiro", "valor": 91}
-                            ]
-                        },
-                        {
-                            "tag": "Atribuicao",
-                            "linha": 11,
-                            "filhos": [
-                                {"tag": "Identificador", "linha": 11, "lexema": "lado"},
-                                {
-                                    "tag": "ExprBinaria",
-                                    "linha": 11,
-                                    "op": "+",
-                                    "filhos": [
-                                        {"tag": "Identificador", "linha": 11, "lexema": "lado"},
-                                        {"tag": "Literal", "linha": 11, "tipo": "inteiro", "valor": 5}
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
+                { "tag": "Literal", "linha": 7, "tipo": "inteiro", "valor": 100 },
+                { "tag": "Literal", "linha": 7, "tipo": "inteiro", "valor": 90 },
+                { "tag": "Literal", "linha": 7, "tipo": "texto", "valor": "cyan" },
             ]
-        }
+        },
     ]
 }
 
