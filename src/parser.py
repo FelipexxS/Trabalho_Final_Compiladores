@@ -1,4 +1,4 @@
-from tokenizer import lista_tokens
+from tokenizer import TokenType, Token, lista_tokens
 
 
 class Parser:
@@ -327,23 +327,24 @@ class Parser:
             print("\nNo input String detected")
 
 class ASTNode:
-
-    def __init__(self, tag, linha, **kwargs):
+    def __init__(self, tag, linha, valor=None, **kwargs): # Adicione 'valor'
         self.tag = tag
         self.linha = linha
+        self.valor = valor # Adicione esta linha
         self.children = []
         for k, v in kwargs.items():
             setattr(self, k, v)
-
     def to_dict(self):
         base = {"tag": self.tag, "linha": self.linha}
-        base.update({k: v for k, v in self.__dict__.items() if k not in ["tag", "linha", "children"]})
+        if self.valor is not None: # Adicione esta condição
+            base["valor"] = self.valor
+        base.update({k: v for k, v in self.__dict__.items() if k not in ["tag", "linha", "children", "valor"]})
         if self.children:
             base["filhos"] = [child.to_dict() for child in self.children]
         return base
 
-
 class ASTParser(Parser):
+    # ... (init, next_token, peek_token não mudam) ...
     def init(self, rules, nonterm_userdef, term_userdef, sample_input_string=None):
         super().init(rules, nonterm_userdef, term_userdef, sample_input_string)
         self.input_tokens = []
@@ -365,48 +366,66 @@ class ASTParser(Parser):
         if not grammarll1:
             raise ValueError("Grammar is not LL(1)")
 
-        self.input_tokens = [(token, idx+1) for idx, token in enumerate(input_string.split())] + [('$', -1)]
+    def parse_with_ast(self, parsing_table, grammarll1, table_term_list, input_tokens):
+        if not grammarll1:
+            raise ValueError("Grammar is not LL(1)")
+        
+        # O input agora deve ser a lista de Tokens do tokenizer, não a string
+        self.input_tokens = input_tokens + [Token(TokenType.EOF, '$', -1)]
         self.current_token_index = 0
 
         stack = [self.start_symbol]
-        root = ASTNode("Bloco", 1)
+        root = ASTNode("Bloco", 1) 
         node_stack = [root]
-
+        
+        # Mapeia nome do token para o tipo de token literal do tokenizer
+        token_map = {t.name.lower(): t for t in TokenType}
+        
         while stack:
+            # ... (lógica inicial do loop) ...
             top = stack.pop(0)
-            node = node_stack.pop(0)
-            tok, linha = self.peek_token()
+            current_node = node_stack.pop(0) if node_stack else None
 
-            # Primeiramente, tratamos o símbolo de epsilon ('#'), que não consome nenhum token de entrada
+            # Obter o token atual do tokenizer
+            tok_obj = self.peek_token()
+            tok_type_name = tok_obj.type.name.lower()
+            
+            # Mapeia token de pontuação para seu próprio literal
+            if tok_obj.type in {TokenType.ATRIBUICAO, TokenType.PONTO_VIRGULA, TokenType.DOIS_PONTOS}:
+                tok_type_name = tok_obj.literal
+
             if top == '#':
-                # ε -> não precisa casar com nada da entrada
                 continue
             elif top in self.term_userdef:
-                if top == tok:
-                    node_stack.append(ASTNode(top, linha))
+                if top == tok_type_name:
+                    # Se for um terminal, cria um nó filho com seu valor
+                    child_node = ASTNode(tag=tok_type_name, linha=tok_obj.line, valor=tok_obj.literal)
+                    if current_node:
+                       current_node.children.append(child_node)
                     self.next_token()
                 else:
-                    raise SyntaxError(f"Esperado {top}, mas encontrou {tok} na linha {linha}")
-            else:
+                    raise SyntaxError(f"Erro de Sintaxe: Esperado '{top}', mas encontrou '{tok_type_name}' na linha {tok_obj.line}")
+            elif top in self.nonterm_userdef:
+                # Lógica para não-terminais (consulta à tabela de parsing)
                 x = list(self.diction.keys()).index(top)
-                y = table_term_list.index(tok)
+                y = table_term_list.index(tok_type_name)
                 rule = parsing_table[x][y]
 
                 if rule == '':
-                    raise SyntaxError(f"Erro de sintaxe com token {tok} na linha {linha}")
+                    raise SyntaxError(f"Erro de Sintaxe: Token inesperado '{tok_type_name}' para a regra '{top}' na linha {tok_obj.line}")
 
-                lhs, rhs = rule.split("->")
-                # Removemos qualquer ocorrência de '#' para não empilhar epsilons
-                rhs_symbols_full = rhs.strip().split()
-                rhs_symbols = [sym for sym in rhs_symbols_full if sym != '#']
+                lhs, rhs_str = rule.split("->")
+                rhs_symbols = [sym for sym in rhs_str.strip().split() if sym != '#']
 
-                children_nodes = [ASTNode(sym, linha) for sym in rhs_symbols]
-                node.children.extend(children_nodes)
+                # Atualiza o nó atual com a regra que está sendo aplicada
+                current_node.tag = lhs 
+                
+                children_nodes = [ASTNode(tag=sym, linha=tok_obj.line) for sym in rhs_symbols]
+                current_node.children.extend(children_nodes)
 
-                # Empilha os símbolos da produção (sem '#') mantendo a ordem correta
                 stack = rhs_symbols + stack
                 node_stack = children_nodes + node_stack
-
+        
         return root.to_dict()
 
 
@@ -452,7 +471,7 @@ if __name__ == "__main__":
         "MUL' -> * FACTOR MUL' | / FACTOR MUL' | #",
         "FACTOR -> ( REL ) | ID | NUM | TEXT | BOOL",
         "ID -> identificador",
-        "NUM -> numero_int | numero_real",
+        "NUM -> numero_inteiro | numero_real",
         "TEXT -> literal_texto",
         "BOOL -> verdadeiro | falso"
     ]
@@ -464,7 +483,7 @@ if __name__ == "__main__":
         'desenhar_circulo', 'var', 'inteiro', 'texto', 'real', 'logico', '=', ';', ':', ',', 'repita', 'vezes', 'fim_repita',
         'enquanto', 'faca', 'fim_enquanto', 'se', 'entao', 'senao', 'fim_se', '#',
         '+', '-', '*', '/', '(', ')', '<=', '<', '>=', '>', '==', '!=', 'identificador', 'literal_texto',
-        'numero_int', 'numero_real', 'verdadeiro', 'falso'
+        'numero_inteiro', 'numero_real', 'verdadeiro', 'falso'
     ]
     
     code = source_code = """
