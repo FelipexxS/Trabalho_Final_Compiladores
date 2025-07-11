@@ -13,6 +13,7 @@ inicio
         avancar lado;
 
 
+
         lado = lado + 5;
     fim_repita;
 fim

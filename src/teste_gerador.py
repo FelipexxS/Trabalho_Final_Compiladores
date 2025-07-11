@@ -1,3 +1,4 @@
+import os
 from gerador import GeradorCodigoVisitor
 
 """Exemplo de entrada para o teste escopado do gerador de código:
@@ -70,8 +71,11 @@ codigo_python_gerado = gerador.gerar_codigo(ast_exemplo)
 
 print(codigo_python_gerado)
 
-with open("D:\\Estudos-Projetos\\Projeto-Compiladores\\Trabalho_Final_Compiladores\\src\\tests\\saida_teste.py", "w", encoding="utf-8") as f:
+caminho_script = os.path.dirname(__file__)
+caminho_saida = os.path.join(caminho_script, 'tests', 'saida_teste.py')
+
+with open(caminho_saida, "w", encoding="utf-8") as f:
     f.write(codigo_python_gerado)
 
-print("\n Código salvo em 'tests/saida_teste.py'")
+print(f"\n Código salvo em '{caminho_saida}'")
 

@@ -24,9 +24,9 @@ class Parser:
                 else:
                     betaRules.append(subrhs)
             if len(alphaRules) != 0:
-                lhs_ = lhs + "'"
+                lhs_ = lhs + "_prime"
                 while (lhs_ in rulesDiction.keys()) or (lhs_ in store.keys()):
-                    lhs_ += "'"
+                    lhs_ += "_prime"
                 for b in range(0, len(betaRules)):
                     betaRules[b].append(lhs_)
                 rulesDiction[lhs] = betaRules
@@ -53,9 +53,9 @@ class Parser:
             for term_key in temp:
                 allStartingWithTermKey = temp[term_key]
                 if len(allStartingWithTermKey) > 1:
-                    lhs_ = lhs + "'"
+                    lhs_ = lhs + "_prime"
                     while (lhs_ in rulesDiction.keys()) or (lhs_ in tempo_dict.keys()):
-                        lhs_ += "'"
+                        lhs_ += "_prime"
                     new_rule.append([term_key, lhs_])
                     ex_rules = []
                     for g in temp[term_key]:

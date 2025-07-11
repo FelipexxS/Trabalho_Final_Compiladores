@@ -111,12 +111,19 @@ except Exception as e:
     print(f"Ocorreu um erro durante a análise semântica: {e}")
 
 # Etapa 4: Geração de Código
-gerador = GeradorCodigoVisitor()
-codigo_gerado = gerador.gerar_codigo(ast)
-print("\n--- Código Gerado ---")
-print(codigo_gerado)
+try:
+    gerador = GeradorCodigoVisitor()
+    codigo_gerado = gerador.gerar_codigo(ast)
+    print("\n--- Código Gerado ---")
+    print(codigo_gerado)
 
-with open("D:\\Estudos-Projetos\\Projeto-Compiladores\\Trabalho_Final_Compiladores\\src\\tests\\saida_teste.py", "w", encoding="utf-8") as f:
-    f.write(codigo_gerado)
+    # Salva o código gerado no arquivo de saída
+    caminho_saida = os.path.join(caminho_script, 'tests', 'saida1.py')
+    with open(caminho_saida, 'w', encoding='utf-8') as f:
+        f.write(codigo_gerado)
+    print(f"\n--- Código salvo com sucesso em: {caminho_saida} ---")
 
-print("\n Código salvo em 'tests/saida_teste.py'")
+except SemanticError as e:
+    print(e)
+except Exception as e:
+    print(f"Ocorreu um erro inesperado: {e}")
