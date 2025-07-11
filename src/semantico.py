@@ -1,396 +1,422 @@
-from __future__ import annotations
-from typing import Any, Dict, List, Tuple, Optional
-from utils import NodeVisitor
+"""
+# semantic.py  – adicional para detectar 3  erros ainda não detecáveis:
 
+- Operandos aritméticos incompatíveis (+ - * /)
+- Operandos relacionais incompatíveis e garante que o resultado de uma comparação é logico
+- Operador desconhecido (qualquer símbolo fora dos conjuntos permitidos)
+(as demais regras já existentes foram mantidas)
 
-# ================================================================
-# 1. Exceções e Tabela de Símbolos
-# ================================================================
-
+- adicional para Varredura em escopo de Funções e verificação de retornos
+- Escopo local para função (SymbolTable.abrir_escopo_local/fechar_escopo_local).
+- Symbol agora distingue categorias e armazena assinatura de função.
+______Visitors novos
+______visit_FuncDecl — registra função, abre escopo local, exige retorno.
+______visit_Retorno — valida tipo e contexto.
+______visit_Call — verifica aridade e tipos dos argumentos, devolve tipo de retorno.
+______Expressões refatoradas para validar operadores aritméticos/relacionais e apontar desconhecidos.
+# --------------------------------------------------------------
+"""
 class SemanticError(Exception):
-    """Exceção lançada para erros semânticos graves (interrompe compilação)."""
-    pass
+    """Exceção levantada pelo analisador semântico."""
+    def __init__(self, msg, line=None):
+        prefix = "Erro Semântico"
+        if line:
+            prefix += f" (linha {line})"
+        super().__init__(f"{prefix}: {msg}")
 
 
-class EntradaTabelaSimbolos:
-    """Registro de variável ou função na tabela de símbolos."""
-
+# =================================================================
+# 1. Tabela de símbolos (escopo global + escopo local de função)
+# =================================================================
+class Symbol:
     def __init__(
         self,
-        nome: str,
-        tipo: str,
-        categoria: str = "var",  # "var" | "funcao"
-        *,
-        tipos_params: Optional[List[str]] = None,
-        tipo_retorno: Optional[str] = None,
-    ) -> None:
-        self.nome = nome
+        name: str,
+        category: str,            # "var" | "funcao"
+        tipo: str | None = None,  # para variáveis
+        tipos_params: list[str] | None = None,
+        tipo_retorno: str | None = None,
+    ):
+        self.name = name
+        self.category = category
         self.tipo = tipo
-        self.categoria = categoria
         self.tipos_params = tipos_params or []
         self.tipo_retorno = tipo_retorno
-
-    def __repr__(self) -> str:  # pragma: no cover
-        if self.categoria == "funcao":
-            return f"Funcao({self.nome}, params={self.tipos_params}, ret={self.tipo_retorno})"
-        return f"Variavel({self.nome!r}, {self.tipo!r})"
+        self.houve_retorno = False
 
 
-class TabelaDeSimbolos:
-    """Pilha de escopos implementada como lista de dicionários."""
-
-    def __init__(self) -> None:
-        self._escopos: List[Dict[str, EntradaTabelaSimbolos]] = [{}]  # escopo global
-        self.erros: List[str] = []
-
-    # ------------------------------------------------------------
-    # Operações sobre escopos
-    # ------------------------------------------------------------
-    def abrir_escopo(self) -> None:
-        self._escopos.append({})
-
-    def fechar_escopo(self) -> None:
-        self._escopos.pop()
-
-    # ------------------------------------------------------------
-    # Declaração de símbolos
-    # ------------------------------------------------------------
-    def _declarar(self, nome: str, entrada: EntradaTabelaSimbolos, linha: int) -> None:
-        escopo_atual = self._escopos[-1]
-        if nome in escopo_atual:
-            self._erro(f"Símbolo '{nome}' já declarado neste escopo", linha)
-            return
-        escopo_atual[nome] = entrada
-
-    def declarar_var(self, nome: str, tipo: str, linha: int) -> None:
-        self._declarar(nome, EntradaTabelaSimbolos(nome, tipo, "var"), linha)
-
-    def declarar_funcao(
-        self,
-        nome: str,
-        tipos_params: List[str],
-        tipo_retorno: str,
-        linha: int,
-    ) -> None:
-        self._declarar(
-            nome,
-            EntradaTabelaSimbolos(
-                nome,
-                nome,  # campo "tipo" não é usado para funções
-                "funcao",
-                tipos_params=tipos_params,
-                tipo_retorno=tipo_retorno,
-            ),
-            linha,
-        )
-
-    # ------------------------------------------------------------
-    # Busca de símbolos
-    # ------------------------------------------------------------
-    def buscar(self, nome: str, linha: int) -> Optional[EntradaTabelaSimbolos]:
-        for escopo in reversed(self._escopos):
-            if nome in escopo:
-                return escopo[nome]
-        self._erro(f"Símbolo '{nome}' não declarado", linha)
-        return None
-
-    # ------------------------------------------------------------
-    # Utilidades
-    # ------------------------------------------------------------
-    def _erro(self, mensagem: str, linha: int) -> None:
-        self.erros.append(f"Linha {linha}: {mensagem}")
-
-    def possui_erros(self) -> bool:
-        return bool(self.erros)
-
-    def __str__(self) -> str:  # pragma: no cover
-        linhas: List[str] = []
-        for i, esc in enumerate(self._escopos):
-            prefixo = "<global>" if i == 0 else f"<escopo {i}>"
-            for nome, ent in esc.items():
-                linhas.append(f"{prefixo:12} {nome}: {ent!r}")
-        return "\n".join(linhas) or "(Tabela vazia)"
-
-# ================================================================
-# 2. Assinaturas de comandos primitivos
-# ================================================================
-ASSINATURAS_PRIMITIVAS: Dict[str, Tuple[List[str], Optional[str]]] = {
-    "avancar": (["inteiro"], None),
-    "definir_cor": (["texto"], None),
-    "imprimir": (["qualquer"], None),      # aceita qualquer tipo
-    "ir_para": (["inteiro", "inteiro"], None),  # novo comando
-}
-
-
-# ================================================================
-# 3. SemanticoVisitor – varredura e verificação
-# ================================================================
-
-class SemanticoVisitor(NodeVisitor):
-    """Percorre a AST e acumula erros semânticos."""
-
+class SymbolTable:
+    """Dois níveis apenas: global e local‐de‐função."""
     def __init__(self):
-        self.tabela = TabelaDeSimbolos()
-        self.funcao_atual: Optional[EntradaTabelaSimbolos] = None  # p/ validar 'retorne'
+        self.global_scope: dict[str, Symbol] = {}
+        self.local_scope: dict[str, Symbol] | None = None  # None quando fora de função
 
-    # ------------------------------------------------------------
-    # Blocos e escopos
-    # ------------------------------------------------------------
-    def visit_Bloco(self, node):
-        self.tabela.abrir_escopo()
-        for filho in node.get("filhos", []):
-            self.visit(filho)
-        self.tabela.fechar_escopo()
+    # -------- lookup / define --------
+    def _current(self):
+        return self.local_scope if self.local_scope is not None else self.global_scope
 
-    # ------------------------------------------------------------
-    # Declarações
-    # ------------------------------------------------------------
-    def visit_DeclaracaoVar(self, node):
-        tipo = node["tipo"]
-        ident = node["ident"]
-        linha = node["linha"]
-        self.tabela.declarar_var(ident, tipo, linha)
+    def define(self, sym: Symbol, line=None):
+        scope = self._current()
+        if sym.name in scope:
+            raise SemanticError(f"Símbolo '{sym.name}' já declarado neste escopo.", line)
+        scope[sym.name] = sym
 
-        # Inicialização opcional
-        if node.get("filhos"):
-            expr_node = node["filhos"][0]
-            tipo_expr = self.visit(expr_node)
-            if not self._compat(tipo, tipo_expr):
-                self.tabela._erro(
-                    f"Tipo da expressão ('{tipo_expr}') é incompatível com o tipo da variável ('{tipo}')",
-                    linha,
-                )
+    def lookup(self, name: str, line=None) -> Symbol:
+        if self.local_scope and name in self.local_scope:
+            return self.local_scope[name]
+        if name in self.global_scope:
+            return self.global_scope[name]
+        raise SemanticError(f"Símbolo '{name}' não declarado.", line)
 
-    def visit_FuncaoDecl(self, node):
-        nome, tipo_retorno, linha = node["nome"], node["tipo_retorno"], node["linha"]
-        params_info: List[Tuple[str, str]] = node.get("params", [])
-        tipos_params = [t for _n, t in params_info]
+    # -------- controle de escopo local --------
+    def abrir_escopo_local(self):
+        self.local_scope = {}
 
-        # Declara a função no escopo atual
-        self.tabela.declarar_funcao(nome, tipos_params, tipo_retorno, linha)
+    def fechar_escopo_local(self):
+        self.local_scope = None
 
-        # Prepara contexto para corpo
-        funcao_anterior = self.funcao_atual
-        self.funcao_atual = self.tabela.buscar(nome, linha)
 
-        self.tabela.abrir_escopo()
-        for nome_param, tipo_param in params_info:
-            self.tabela.declarar_var(nome_param, tipo_param, linha)
+# =================================================================
+# 2. Analisador
+# =================================================================
+class SemanticAnalyzer:
+    ARIT_OPS = {"+", "-", "*", "/"}
+    REL_OPS  = {"==", "!=", ">", "<", ">=", "<="}
 
-        self.visit(node["filhos"][0])  # corpo da função
+    def __init__(self, ast_tree):
+        self.ast = ast_tree
+        self.table = SymbolTable()
+        self.funcao_atual: Symbol | None = None  # aponta símbolo da função corrente
 
-        self.tabela.fechar_escopo()
-        self.funcao_atual = funcao_anterior
+    # ---------------- API ----------------
+    def analyze(self):
+        self.visit(self.ast)
 
-    # ------------------------------------------------------------
-    # Atribuição e uso de identificadores
-    # ------------------------------------------------------------
-    def visit_Atribuicao(self, node):
-        linha = node["linha"]
-        var_node, expr_node = node["filhos"]
+    # ---------------- visitor dispatcher ----------------
+    def visit(self, node):
+        meth = getattr(self, f"visit_{node['tag']}", self.generic_visit)
+        return meth(node)
 
-        if var_node["tag"] != "Identificador":
-            self.tabela._erro("O lado esquerdo de uma atribuição deve ser uma variável", linha)
-            return
+    def generic_visit(self, node):
+        for child in node.get("filhos", []):
+            self.visit(child)
 
-        entrada_var = self.tabela.buscar(var_node["lexema"], linha)
-        if entrada_var and entrada_var.categoria != "var":
-            self.tabela._erro(
-                f"Não é possível atribuir a '{var_node['lexema']}', que é uma função.", linha
+    # ====================================================
+    # 3. Helpers de tipagem
+    # ====================================================
+    def _compat_numeric(self, t1, t2):
+        if t1 == t2 == "inteiro":
+            return "inteiro"
+        if {t1, t2} <= {"inteiro", "real"}:
+            return "real"
+        raise SemanticError(f"Operandos numéricos incompatíveis: '{t1}' e '{t2}'")
+
+    # ====================================================
+    # 4. Declaração de variável
+    # ====================================================
+    def visit_DECL(self, node):
+        tipo = node["filhos"][1]["filhos"][0]["tag"]       # TYPE
+        ident_node = node["filhos"][3]["filhos"][0]
+        nome = ident_node.get("valor", ident_node["tag"])
+        self.table.define(Symbol(nome, "var", tipo), node["linha"])
+
+    # ====================================================
+    # 5. Funções
+    # ====================================================
+    def visit_FuncDecl(self, node):
+        """
+        Nó esperado:
+          tag = 'FuncDecl'
+          campos: nome, tipo_retorno, params (lista de (nome,tipo)), filhos = corpo (CMDS)
+        """
+        nome = node["nome"]
+        tipo_ret = node["tipo_retorno"]
+        tipos_params = [t for _n, t in node["params"]]
+
+        # declara na tabela global
+        self.table.define(
+            Symbol(nome, "funcao", tipos_params=tipos_params, tipo_retorno=tipo_ret),
+            node["linha"],
+        )
+        func_sym = self.table.lookup(nome)
+
+        # novo contexto
+        prev_func = self.funcao_atual
+        self.funcao_atual = func_sym
+        self.table.abrir_escopo_local()
+
+        # parâmetros como variáveis locais
+        for (param_nome, param_tipo) in node["params"]:
+            self.table.define(Symbol(param_nome, "var", param_tipo), node["linha"])
+
+        # visita corpo
+        for cmd in node["filhos"]:
+            self.visit(cmd)
+
+        # garante retorno presente
+        if not func_sym.houve_retorno and tipo_ret != "void":
+            raise SemanticError(
+                f"Função '{nome}' termina sem instrução 'retorne'.", node["linha"]
             )
-            return
 
-        tipo_lhs = entrada_var.tipo if entrada_var else "indefinido"
-        tipo_rhs = self.visit(expr_node)
-
-        if "indefinido" not in (tipo_lhs, tipo_rhs) and not self._compat(tipo_lhs, tipo_rhs):
-            self.tabela._erro(
-                f"Tipos incompatíveis em atribuição: '{tipo_lhs}' ← '{tipo_rhs}'", linha
-            )
-
-    def visit_Identificador(self, node):
-        entrada = self.tabela.buscar(node["lexema"], node["linha"])
-        if not entrada:
-            return "indefinido"  # erro já reportado
-        if entrada.categoria == "funcao":
-            self.tabela._erro(
-                f"Nome de função '{node['lexema']}' usado como variável.", node["linha"]
-            )
-            return "indefinido"
-        return entrada.tipo
-
-    # ------------------------------------------------------------
-    # Literais e expressões
-    # ------------------------------------------------------------
-    def visit_Literal(self, node):
-        return node["tipo"]
-
-    def visit_ExprBinaria(self, node):
-        op, linha = node["op"], node["linha"]
-        lhs_node, rhs_node = node["filhos"]
-        tipo_lhs = self.visit(lhs_node)
-        tipo_rhs = self.visit(rhs_node)
-
-        if "indefinido" in (tipo_lhs, tipo_rhs):
-            return "indefinido"
-
-        # ------------------ operadores aritméticos -----------------
-        if op in {"+", "-", "*", "/"}:
-            if not (self._compat("real", tipo_lhs) and self._compat("real", tipo_rhs)):
-                self.tabela._erro(
-                    f"Operador '{op}' não suporta os tipos '{tipo_lhs}' e '{tipo_rhs}'", linha
-                )
-                return "indefinido"
-            return "real" if "real" in (tipo_lhs, tipo_rhs) else "inteiro"
-
-        # ------------------ operadores relacionais -----------------
-        if op in {">", "<", ">=", "<="}:
-            if not (self._compat("real", tipo_lhs) and self._compat("real", tipo_rhs)):
-                self.tabela._erro(
-                    f"Operador '{op}' não suporta os tipos '{tipo_lhs}' e '{tipo_rhs}'", linha
-                )
-                return "indefinido"
-            return "booleano"
-
-        # ------------------ igualdade -----------------------------
-        if op in {"==", "!="}:
-            if not (self._compat(tipo_lhs, tipo_rhs) or self._compat(tipo_rhs, tipo_lhs)):
-                self.tabela._erro(
-                    f"Comparação de igualdade entre tipos incompatíveis: '{tipo_lhs}' e '{tipo_rhs}'",
-                    linha,
-                )
-                return "indefinido"
-            return "booleano"
-
-        self.tabela._erro(f"Operador desconhecido '{op}'", linha)
-        return "indefinido"
-
-    # ------------------------------------------------------------
-    # Estruturas de controle
-    # ------------------------------------------------------------
-    def visit_If(self, node):
-        linha = node["linha"]
-        cond_node, then_node = node["filhos"][:2]
-        tipo_cond = self.visit(cond_node)
-        if tipo_cond not in {"booleano", "indefinido"}:
-            self.tabela._erro(
-                f"Condição do 'se' deve ser 'booleano', mas é '{tipo_cond}'", linha
-            )
-        self.visit(then_node)
-        if len(node["filhos"]) > 2:
-            self.visit(node["filhos"][2])
-
-    def visit_Enquanto(self, node):
-        linha = node["linha"]
-        cond_node, corpo_node = node["filhos"]
-        tipo_cond = self.visit(cond_node)
-        if tipo_cond not in {"booleano", "indefinido"}:
-            self.tabela._erro(
-                f"Condição do 'enquanto' deve ser 'booleano', mas é '{tipo_cond}'", linha
-            )
-        self.visit(corpo_node)
-
-    def visit_Repita(self, node):
-        linha = node["linha"]
-        vezes_node, corpo_node = node["filhos"]
-        if not (vezes_node.get("tag") == "Literal" and vezes_node.get("tipo") == "inteiro"):
-            self.tabela._erro(
-                "O número de repetições no 'repita' deve ser literal inteiro (ex: 5)", linha
-            )
-        self.visit(corpo_node)
-
-    # ------------------------------------------------------------
-    # Chamadas de função e retorno
-    # ------------------------------------------------------------
-    def visit_FuncaoCall(self, node):
-        nome, linha = node["nome"], node["linha"]
-        tipos_args = [self.visit(arg) for arg in node.get("filhos", [])]
-
-        if nome in ASSINATURAS_PRIMITIVAS:
-            assinatura = ASSINATURAS_PRIMITIVAS[nome]
-            self._checar_assinatura(nome, tipos_args, assinatura, linha)
-            return assinatura[1]
-
-        entrada = self.tabela.buscar(nome, linha)
-        if not entrada:
-            return "indefinido"
-        if entrada.categoria != "funcao":
-            self.tabela._erro(f"'{nome}' não é uma função", linha)
-            return "indefinido"
-
-        assinatura = (entrada.tipos_params, entrada.tipo_retorno)
-        self._checar_assinatura(nome, tipos_args, assinatura, linha)
-        return entrada.tipo_retorno
+        # restaura contexto
+        self.table.fechar_escopo_local()
+        self.funcao_atual = prev_func
 
     def visit_Retorno(self, node):
-        linha = node["linha"]
-        if not self.funcao_atual:
-            self.tabela._erro("'retorne' só pode aparecer dentro de função", linha)
-            return
+        if self.funcao_atual is None:
+            raise SemanticError("'retorne' fora de uma função.", node["linha"])
 
+        expr_type = self.visit(node["filhos"][1])   # REL
         esperado = self.funcao_atual.tipo_retorno
-        tem_expr = bool(node.get("filhos"))
-
-        if not tem_expr and esperado != "vazio":
-            self.tabela._erro(
-                f"Retorno vazio em função que espera '{esperado}'", linha
+        if esperado == "real" and expr_type == "inteiro":
+            pass
+        elif expr_type != esperado:
+            raise SemanticError(
+                f"'retorne' devolve '{expr_type}', mas a função espera '{esperado}'.",
+                node["linha"],
             )
-            return
+        self.funcao_atual.houve_retorno = True
 
-        if tem_expr:
-            real = self.visit(node["filhos"][0])
-            if esperado == "vazio":
-                self.tabela._erro("Função 'vazio' não pode retornar valor", linha)
-            elif not self._compat(esperado, real):
-                self.tabela._erro(
-                    f"Tipo de retorno incompatível: esperado '{esperado}', recebeu '{real}'",
-                    linha,
-                )
+    # chamadas: nó 'Call' => filhos [ID, args*]
+    def visit_Call(self, node):
+        nome = node["ident"]
+        sym = self.table.lookup(nome, node["linha"])
+        if sym.category != "funcao":
+            raise SemanticError(f"'{nome}' não é função.", node["linha"])
 
-    # ============================================================
-    # 4. Auxiliares de tipagem
-    # ============================================================
-    @staticmethod
-    def _compat(tipo_lhs: str, tipo_rhs: str) -> bool:
-        if "qualquer" in (tipo_lhs, tipo_rhs):
-            return True
-        if tipo_lhs == tipo_rhs:
-            return True
-        return tipo_lhs == "real" and tipo_rhs == "inteiro"
-
-    def _checar_assinatura(
-        self,
-        nome: str,
-        reais: List[str],
-        esperados: Tuple[List[str], Optional[str]],
-        linha: int,
-    ) -> None:
-        tipos_esp, _ = esperados
-        if len(reais) != len(tipos_esp):
-            self.tabela._erro(
-                f"Função '{nome}' espera {len(tipos_esp)} arg(s), mas recebeu {len(reais)}",
-                linha,
+        if len(node["args"]) != len(sym.tipos_params):
+            raise SemanticError(
+                f"Função '{nome}' espera {len(sym.tipos_params)} argumento(s), "
+                f"mas recebeu {len(node['args'])}.", node["linha"]
             )
-            return
-        for i, (t_real, t_esp) in enumerate(zip(reais, tipos_esp), 1):
-            if "indefinido" in (t_real, t_esp):
+        for arg_node, esperado in zip(node["args"], sym.tipos_params):
+            tipo_arg = self.visit(arg_node)
+            if esperado == "real" and tipo_arg == "inteiro":
                 continue
-            if not self._compat(t_esp, t_real):
-                self.tabela._erro(
-                    f"Arg {i} de '{nome}': esperado '{t_esp}', recebeu '{t_real}'",
-                    linha,
+            if tipo_arg != esperado:
+                raise SemanticError(
+                    f"Argumento de '{nome}' deve ser '{esperado}', recebeu '{tipo_arg}'.",
+                    node["linha"],
                 )
+        return sym.tipo_retorno
+
+    # ====================================================
+    # 6. Atribuição
+    # ====================================================
+    def visit_ATR(self, node):
+        ident = node["filhos"][0]["filhos"][0]["valor"]
+        sym = self.table.lookup(ident, node["linha"])
+        expr_type = self.visit(node["filhos"][2])
+        if sym.tipo == "real" and expr_type == "inteiro":
+            return
+        if sym.tipo != expr_type:
+            raise SemanticError(
+                f"Não pode atribuir '{expr_type}' a variável '{ident}' do tipo '{sym.tipo}'.",
+                node["linha"],
+            )
+
+    # ====================================================
+    # 7. Expressões (REL, ADD, MUL, FACTOR)
+    # ====================================================
+    def visit_REL(self, node):
+        left = self.visit(node["filhos"][0])
+        if len(node["filhos"]) == 1:
+            return left
+        op = node["filhos"][1]["filhos"][0]["tag"]
+        if op not in self.REL_OPS:
+            raise SemanticError(f"Operador relacional desconhecido '{op}'.", node["linha"])
+        right = self.visit(node["filhos"][1]["filhos"][1])
+        # compatibilidade
+        if (left == right == "texto") or \
+           (left in {"inteiro", "real"} and right in {"inteiro", "real"}):
+            return "logico"
+        raise SemanticError(
+            f"Comparação entre tipos incompatíveis '{left}' e '{right}'.", node["linha"]
+        )
+
+    def visit_ADD(self, node):
+        tipo = self.visit(node["filhos"][0])
+        idx = 1
+        while idx < len(node["filhos"]):
+            op = node["filhos"][idx]["tag"]
+            if op not in self.ARIT_OPS:
+                raise SemanticError(f"Operador aritmético desconhecido '{op}'.", node["linha"])
+            tipo2 = self.visit(node["filhos"][idx + 1])
+            tipo = self._compat_numeric(tipo, tipo2)
+            idx += 2
+        return tipo
+
+    def visit_MUL(self, node):
+        tipo = self.visit(node["filhos"][0])
+        idx = 1
+        while idx < len(node["filhos"]):
+            op = node["filhos"][idx]["tag"]
+            if op not in {"*", "/"}:
+                raise SemanticError(f"Operador aritmético desconhecido '{op}'.", node["linha"])
+            tipo2 = self.visit(node["filhos"][idx + 1])
+            tipo = self._compat_numeric(tipo, tipo2)
+            idx += 2
+        return tipo
+
+    def visit_FACTOR(self, node):
+        child = node["filhos"][0]
+        tag = child["tag"]
+        if tag == "NUM":
+            num_tag = child["filhos"][0]["tag"]
+            return "inteiro" if num_tag == "numero_inteiro" else "real"
+        if tag == "TEXT":
+            return "texto"
+        if tag == "BOOL":
+            return "logico"
+        if tag == "ID":
+            nome = child["filhos"][0]["valor"]
+            return self.table.lookup(nome, child["linha"]).tipo
+        if tag == "(":
+            return self.visit(child["filhos"][1])  # expressão dentro de parênteses
+        if tag == "Call":
+            return self.visit_Call(child)
+        raise SemanticError(f"Fator inesperado na expressão: {tag}", node["linha"])
 
 
-# ================================================================
-# 5. Função utilitária
-# ================================================================
-def analisar_semantica(ast_raiz: Dict[str, Any]) -> List[str]:
-    sem = SemanticoVisitor()
-    sem.visit(ast_raiz)
-    return sem.tabela.erros
+    def visit_AV(self, node):
+        """Verifica o comando 'avancar'."""
+        arg_type = self.visit(node['filhos'][1]) # Visita o nó REL
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(f"O comando 'avancar' espera um argumento numérico (inteiro ou real), mas recebeu '{arg_type}'.", node['linha'])
+            
+    def visit_definir_cor(self, node):
+        """Verifica o comando 'definir_cor'."""
+        arg_type = self.visit(node['filhos'][1]) # Visita o nó REL
+        if arg_type != 'texto':
+            raise SemanticError(f"O comando 'definir_cor' espera um argumento do tipo texto, mas recebeu '{arg_type}'.", node['linha'])
+            
+    # Adicione métodos 'visit_*' para outros comandos (REC, GD, GE, etc.) seguindo o mesmo padrão.
+    def visit_REC(self, node):
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(f"O comando 'recuar' espera um argumento numérico, mas recebeu '{arg_type}'.", node['linha'])
 
+    def visit_SE(self, node):
+        """Verifica a condição de um comando 'se'."""
+        condition_type = self.visit(node['filhos'][1]) # Nó REL
+        if condition_type != 'logico':
+            raise SemanticError(f"A condição do 'se' deve ser do tipo logico, mas é '{condition_type}'.", node['linha'])
+        # Visita os blocos 'entao' e 'senao'
+        self.visit(node['filhos'][3]) # Nó CMDS (entao)
+        self.visit(node['filhos'][4]) # Nó SE_CONT (senao/fim_se)
+        
+    def visit_ENQ(self, node):
+        """Verifica a condição de um comando 'enquanto'."""
+        condition_type = self.visit(node['filhos'][1]) # Nó REL
+        if condition_type != 'logico':
+            raise SemanticError(f"A condição do 'enquanto' deve ser do tipo logico, mas é '{condition_type}'.", node['linha'])
+        self.visit(node['filhos'][3]) # Nó CMDS (faca)
+        
+    def visit_REP(self, node):
+        """Verifica o contador de um comando 'repita'."""
+        counter_type = self.visit(node['filhos'][1]) # Nó REL
+        if counter_type != 'inteiro':
+            raise SemanticError(f"O contador do 'repita' deve ser do tipo inteiro, mas é '{counter_type}'.", node['linha'])
+        self.visit(node['filhos'][3]) # Nó CMDS
+    
+    def generic_visit(self, node):
+        """Método para visitar nós que não têm uma regra específica."""
+        if 'filhos' in node:
+            for child in node['filhos']:
+                self.visit(child)
+    
+    # Adicione este método dentro da classe SemanticAnalyzer em semantic.py
 
-# ================================================================
-# 6. Teste manual: Observação, eu retirei pra evitar problema no Pull Request
-# ================================================================
+    def visit_GE(self, node):
+        """Verifica o comando 'girar_esquerda'."""
+        # O nó GE tem como filhos [girar_esquerda, REL, ;]
+        # O argumento está no segundo filho (índice 1)
+        arg_type = self.visit(node['filhos'][1]) # Visita o nó REL para obter seu tipo
+        
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O comando 'girar_esquerda' espera um argumento numérico (inteiro ou real), mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+    
+    # Adicione também estes métodos ao semantic.py
+
+    def visit_GD(self, node):
+        """Verifica o comando 'girar_direita'."""
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O comando 'girar_direita' espera um argumento numérico (inteiro ou real), mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+
+    def visit_DE(self, node):
+        """Verifica o comando 'definir_espessura'."""
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O comando 'definir_espessura' espera um argumento numérico (inteiro ou real), mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+    
+    # Adicione estes métodos à classe SemanticAnalyzer em semantic.py
+
+    def visit_DC(self, node):
+        """Verifica o comando 'definir_cor'."""
+        # Gramática: DC -> definir_cor REL ;
+        arg_type = self.visit(node['filhos'][1]) # Visita o nó REL
+        if arg_type != 'texto':
+            raise SemanticError(
+                f"O comando 'definir_cor' espera um argumento do tipo texto, mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+
+    def visit_CDF(self, node):
+        """Verifica o comando 'cor_de_fundo'."""
+        # Gramática: CDF -> cor_de_fundo REL ;
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type != 'texto':
+            raise SemanticError(
+                f"O comando 'cor_de_fundo' espera um argumento do tipo texto, mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+
+    def visit_DSQ(self, node):
+        """Verifica o comando 'desenhar_quadrado'."""
+        # Gramática: DSQ -> desenhar_quadrado REL ;
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O comando 'desenhar_quadrado' espera um argumento numérico, mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+
+    def visit_DSC(self, node):
+        """Verifica o comando 'desenhar_circulo'."""
+        # Gramática: DSC -> desenhar_circulo REL ;
+        arg_type = self.visit(node['filhos'][1])
+        if arg_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O comando 'desenhar_circulo' espera um argumento numérico, mas recebeu '{arg_type}'.", 
+                node['linha']
+            )
+
+    def visit_IRP(self, node):
+        """Verifica o comando 'ir_para', que possui dois argumentos."""
+        # Gramática: IRP -> ir_para REL REL ;
+        # Os filhos do nó são [ir_para, REL, REL, ;]
+        arg1_type = self.visit(node['filhos'][1]) # Primeiro argumento REL
+        arg2_type = self.visit(node['filhos'][2]) # Segundo argumento REL
+
+        if arg1_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O primeiro argumento do comando 'ir_para' (coordenada x) deve ser numérico, mas recebeu '{arg1_type}'.",
+                node['linha']
+            )
+        
+        if arg2_type not in ['inteiro', 'real']:
+            raise SemanticError(
+                f"O segundo argumento do comando 'ir_para' (coordenada y) deve ser numérico, mas recebeu '{arg2_type}'.",
+                node['linha']
+            )
