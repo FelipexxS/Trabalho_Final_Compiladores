@@ -21,6 +21,8 @@ class GeradorCodigoVisitor(NodeVisitor):
       "definir_espessura": "turtle.pensize",
       "cor_de_fundo": "turtle.bgcolor",
       "limpar_tela": "turtle.clear",
+      "desenhar_quadrado": "desenhar_quadrado",
+      "desenhar_circulo": "desenhar_circulo"
     }
   
   def gerar_codigo(self, ast_raiz: Dict[str, Any]) -> str:
@@ -134,15 +136,11 @@ class GeradorCodigoVisitor(NodeVisitor):
     cmd_name = node['filhos'][0]['tag']
     turtle_cmd = self.mapa_comandos_turtle.get(cmd_name)
     if turtle_cmd:
-        if len(node['filhos']) > 1 and node['filhos'][1]['tag'] == 'REL':
-            arg_val = self.visit(node['filhos'][1])
-            self._add_linha(f"{turtle_cmd}({arg_val})")
-            if cmd_name == "desenhar_quadrado":
-              self.visit_Desenhar_Quadrado()
-            elif cmd_name == "desenhar_circulo":
-              self.visit_Desenhar_Circulo()
-        else:
-             self._add_linha(f"{turtle_cmd}()")
+      if len(node['filhos']) > 1 and node['filhos'][1]['tag'] == 'REL':
+        arg_val = self.visit(node['filhos'][1])
+        self._add_linha(f"{turtle_cmd}({arg_val})")
+      else:
+        self._add_linha(f"{turtle_cmd}()")
   
   visit_AV = _visit_simple_cmd
   visit_REC = _visit_simple_cmd
@@ -157,39 +155,28 @@ class GeradorCodigoVisitor(NodeVisitor):
   def visit_LP(self, node): self._add_linha("turtle.clear()")
   
   def visit_IRP(self, node):
-      arg1 = self.visit(node['filhos'][1])
-      arg2 = self.visit(node['filhos'][2])
-      self._add_linha(f"turtle.goto({arg1}, {arg2})")
+    arg1 = self.visit(node['filhos'][1])
+    arg2 = self.visit(node['filhos'][2])
+    self._add_linha(f"turtle.goto({arg1}, {arg2})")
       
-  def visit_DSQ(self, node):
-      lado = self.visit(node['filhos'][1])
-      self._add_linha(f"for _ in range(4):")
-      self.indent_level += 1
-      self._add_linha(f"turtle.forward({lado})")
-      self._add_linha(f"turtle.right(90)")
-      self.indent_level -= 1
-
-  def visit_DSC(self, node):
-      raio = self.visit(node['filhos'][1])
-      self._add_linha(f"turtle.circle({raio})")
-  
-  def visit_Desenhar_Quadrado(self, node: Dict[str, Any]):
-    tamanho = self.visit(node["filhos"][0])
-    lado = self.visit(node["filhos"][1])
+  def visit_DSQ(self, node: Dict[str, Any]):
+    tamanho = self.visit(node["filhos"][1])
     cor = self.visit(node["filhos"][2])
-    
+      
     self._add_linha(f"tela.color({cor})")
     self._add_linha(f"tela.begin_fill()")
-    for _ in range(3):
-      self._add_linha(f"tela.forward({tamanho})")
-      self._add_linha(f"tela.right({lado})")
+    self._add_linha(f"for _ in range(4):")
+    self.indent_level += 1
+    self._add_linha(f"tela.forward({tamanho})")
+    self._add_linha(f"tela.right(90)")
+    self.indent_level -= 1
     self._add_linha(f"tela.forward({tamanho})")
     self._add_linha(f"tela.end_fill()")
-  
-  def visit_Desenhar_Circulo(self, node: Dict[str, Any]):
-    raio = self.visit(node["filhos"][0])
-    cor_de_fundo = self.visit(node["filhos"][1])
-    cor_da_borda = self.visit(node["filhos"][2])
+
+  def visit_DSC(self, node: Dict[str, Any]):
+    raio = self.visit(node["filhos"][1])
+    cor_de_fundo = self.visit(node["filhos"][2])
+    cor_da_borda = self.visit(node["filhos"][3])
     
     self._add_linha(f"tela.color({cor_da_borda}, {cor_de_fundo})")
     self._add_linha(f"tela.begin_fill()")

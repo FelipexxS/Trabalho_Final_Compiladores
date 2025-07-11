@@ -73,9 +73,6 @@ class TokenType(Enum):
     # Fim do arquivo
     EOF = "EOF"
 
-
-# Uma classe simples para armazenar as informações de cada token:
-# o seu tipo (da Enum acima) e o seu valor literal (o texto original).
 class Token:
     def __init__(self, type, literal, line):
         self.type = type
@@ -84,9 +81,6 @@ class Token:
 
     def __repr__(self):
         return f"Token(type={self.type.name}, literal='{self.literal}', line={self.line})"
-
-
-# Classe main que fará a análise do código-fonte.
 
 class Tokenizer:
     def __init__(self, source_code):

@@ -1,6 +1,9 @@
 inicio
     var inteiro: lado;
     var texto: cor;
+    var inteiro: tamanho_quadrado;
+    var texto: cor_de_fundo_quadrado;
+
 
     lado = 10;
     cor_de_fundo "black";
@@ -14,9 +17,8 @@ inicio
     fim_repita;
     
     tamanho_quadrado = 100;
-    lado_quadrado = 90;
     cor_de_fundo_quadrado = "red";
-    desenhar_quadrado tamanho_quadrado lado_quadrado cor_de_fundo_quadrado;
+    desenhar_quadrado tamanho_quadrado cor_de_fundo_quadrado;
 
     desenhar_circulo 80 "cyan" "red";
 fim
