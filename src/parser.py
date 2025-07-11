@@ -1,4 +1,4 @@
-from tokenizer import lista_tokens
+from tokenizer import TokenType, Token, lista_tokens
 
 
 class Parser:
@@ -24,9 +24,9 @@ class Parser:
                 else:
                     betaRules.append(subrhs)
             if len(alphaRules) != 0:
-                lhs_ = lhs + "'"
+                lhs_ = lhs + "_prime"
                 while (lhs_ in rulesDiction.keys()) or (lhs_ in store.keys()):
-                    lhs_ += "'"
+                    lhs_ += "_prime"
                 for b in range(0, len(betaRules)):
                     betaRules[b].append(lhs_)
                 rulesDiction[lhs] = betaRules
@@ -53,9 +53,9 @@ class Parser:
             for term_key in temp:
                 allStartingWithTermKey = temp[term_key]
                 if len(allStartingWithTermKey) > 1:
-                    lhs_ = lhs + "'"
+                    lhs_ = lhs + "_prime"
                     while (lhs_ in rulesDiction.keys()) or (lhs_ in tempo_dict.keys()):
-                        lhs_ += "'"
+                        lhs_ += "_prime"
                     new_rule.append([term_key, lhs_])
                     ex_rules = []
                     for g in temp[term_key]:
@@ -327,23 +327,24 @@ class Parser:
             print("\nNo input String detected")
 
 class ASTNode:
-
-    def __init__(self, tag, linha, **kwargs):
+    def __init__(self, tag, linha, valor=None, **kwargs): # Adicione 'valor'
         self.tag = tag
         self.linha = linha
+        self.valor = valor # Adicione esta linha
         self.children = []
         for k, v in kwargs.items():
             setattr(self, k, v)
-
     def to_dict(self):
         base = {"tag": self.tag, "linha": self.linha}
-        base.update({k: v for k, v in self.__dict__.items() if k not in ["tag", "linha", "children"]})
+        if self.valor is not None: # Adicione esta condição
+            base["valor"] = self.valor
+        base.update({k: v for k, v in self.__dict__.items() if k not in ["tag", "linha", "children", "valor"]})
         if self.children:
             base["filhos"] = [child.to_dict() for child in self.children]
         return base
 
-
 class ASTParser(Parser):
+    # ... (init, next_token, peek_token não mudam) ...
     def init(self, rules, nonterm_userdef, term_userdef, sample_input_string=None):
         super().init(rules, nonterm_userdef, term_userdef, sample_input_string)
         self.input_tokens = []
@@ -365,135 +366,84 @@ class ASTParser(Parser):
         if not grammarll1:
             raise ValueError("Grammar is not LL(1)")
 
-        self.input_tokens = [(token, idx+1) for idx, token in enumerate(input_string.split())] + [('$', -1)]
+    def parse_with_ast(self, parsing_table, grammarll1, table_term_list, input_tokens):
+        if not grammarll1:
+            raise ValueError("Grammar is not LL(1)")
+        
+        # O input agora deve ser a lista de Tokens do tokenizer, não a string
+        self.input_tokens = input_tokens + [Token(TokenType.EOF, '$', -1)]
         self.current_token_index = 0
 
         stack = [self.start_symbol]
-        root = ASTNode("Bloco", 1)
+        root = ASTNode("Bloco", 1) 
         node_stack = [root]
+        
+        # Mapeia nome do token para o tipo de token literal do tokenizer
+        token_map = {t.name.lower(): t for t in TokenType}
+        
+        # ---------- FUNÇÃO AUXILIAR ----------
+        def _tag_ok(simbolo: str) -> str:
+            """
+            Converte nomes de não-terminais com apóstrofo para algo compatível
+            com identificadores Python.  Ex.:  ADD' -> ADD_prime
+            """
+            return simbolo.replace("'", "_prime")
 
         while stack:
+            # ... (lógica inicial do loop) ...
             top = stack.pop(0)
-            node = node_stack.pop(0)
-            tok, linha = self.peek_token()
+            current_node = node_stack.pop(0) if node_stack else None
 
-            # Primeiramente, tratamos o símbolo de epsilon ('#'), que não consome nenhum token de entrada
+            # Obter o token atual do tokenizer
+            tok_obj = self.peek_token()
+            tok_type_name = tok_obj.type.name.lower()
+            
+            # Mapeia token de pontuação para seu próprio literal
+            if tok_obj.type in {
+                TokenType.ATRIBUICAO, TokenType.PONTO_VIRGULA, TokenType.DOIS_PONTOS,
+                TokenType.VIRGULA, TokenType.SOMA, TokenType.SUBTRACAO,
+                TokenType.MULTIPLICACAO, TokenType.DIVISAO, TokenType.RESTO,
+                TokenType.IGUAL, TokenType.MENOR, TokenType.MAIOR,
+                TokenType.PARENTESE_ESQ, TokenType.PARENTESE_DIR
+            }:
+                tok_type_name = tok_obj.literal
+
+            if tok_obj.type == TokenType.EOF:
+                tok_type_name = '$'
+
             if top == '#':
-                # ε -> não precisa casar com nada da entrada
                 continue
             elif top in self.term_userdef:
-                if top == tok:
-                    node_stack.append(ASTNode(top, linha))
+                if top == tok_type_name:
+                    # Se for um terminal, atualiza o nó atual com seu valor e linha.
+                    # Nós terminais são folhas e não terão filhos.
+                    if current_node:
+                       current_node.valor = tok_obj.literal
+                       current_node.linha = tok_obj.line
                     self.next_token()
                 else:
-                    raise SyntaxError(f"Esperado {top}, mas encontrou {tok} na linha {linha}")
-            else:
+                    raise SyntaxError(f"Erro de Sintaxe: Esperado '{top}', mas encontrou '{tok_type_name}' na linha {tok_obj.line}")
+            elif top in self.nonterm_userdef:
+                # Lógica para não-terminais (consulta à tabela de parsing)
                 x = list(self.diction.keys()).index(top)
-                y = table_term_list.index(tok)
+                y = table_term_list.index(tok_type_name)
                 rule = parsing_table[x][y]
 
                 if rule == '':
-                    raise SyntaxError(f"Erro de sintaxe com token {tok} na linha {linha}")
+                    raise SyntaxError(f"Erro de Sintaxe: Token inesperado '{tok_type_name}' para a regra '{top}' na linha {tok_obj.line}")
 
-                lhs, rhs = rule.split("->")
-                # Removemos qualquer ocorrência de '#' para não empilhar epsilons
-                rhs_symbols_full = rhs.strip().split()
-                rhs_symbols = [sym for sym in rhs_symbols_full if sym != '#']
+                lhs, rhs_str = rule.split("->")
+                rhs_symbols = [sym for sym in rhs_str.strip().split() if sym != '#']
 
-                children_nodes = [ASTNode(sym, linha) for sym in rhs_symbols]
-                node.children.extend(children_nodes)
+                # Atualiza o nó atual com a regra que está sendo aplicada
+                current_node.tag = _tag_ok(lhs)
+                
+                children_nodes = [
+                    ASTNode(tag=_tag_ok(sym), linha=tok_obj.line) for sym in rhs_symbols
+                ]
+                current_node.children.extend(children_nodes)
 
-                # Empilha os símbolos da produção (sem '#') mantendo a ordem correta
                 stack = rhs_symbols + stack
                 node_stack = children_nodes + node_stack
-
+        
         return root.to_dict()
-
-
-
-# Exemplo de uso:
-if __name__ == "__main__":
-
-    
-
-
-    rules = [
-        "S -> inicio B fim",
-        "B -> CMDS",
-        "CMDS -> CMD CMDS | #",
-        "CMD -> AV | REC | GD | GE | IRP | LC | AC | DC | DE | CDF | LP | DECL | REP | ENQ | SE | ATR | DSQ | DSC",
-        "ATR -> ATT ;",
-        "AV -> avancar REL ;",
-        "REC -> recuar REL ;",
-        "GD -> girar_direita REL ;",
-        "GE -> girar_esquerda REL ;",
-        "IRP -> ir_para REL REL ;",
-        "LC -> levantar_caneta ;",
-        "AC -> abaixar_caneta ;",
-        "DC -> definir_cor REL ;",
-        "DE -> definir_espessura REL ;",
-        "CDF -> cor_de_fundo REL ;",
-        "LP -> limpar_tela ;",
-        "DSQ -> desenhar_quadrado REL ;",
-        "DSC -> desenhar_circulo REL ;",
-        "DECL -> var TYPE : ID ;",
-        "TYPE -> inteiro | texto | real | logico",
-        "ATT -> ID = REL",
-        "REP -> repita REL vezes CMDS fim_repita ;",
-        "ENQ -> enquanto REL faca CMDS fim_enquanto ;",
-        "SE -> se REL entao CMDS SE_CONT",
-        "SE_CONT -> senao CMDS fim_se ; | fim_se ;",
-        "REL -> ADD REL'",
-        "REL' -> OP_REL ADD REL' | #",
-        "OP_REL -> == | != | > | < | >= | <=",
-        "ADD -> MUL ADD'",
-        "ADD' -> + MUL ADD' | - MUL ADD' | #",
-        "MUL -> FACTOR MUL'",
-        "MUL' -> * FACTOR MUL' | / FACTOR MUL' | #",
-        "FACTOR -> ( REL ) | ID | NUM | TEXT | BOOL",
-        "ID -> identificador",
-        "NUM -> numero_int | numero_real",
-        "TEXT -> literal_texto",
-        "BOOL -> verdadeiro | falso"
-    ]
-    nonterm_userdef = ['S', 'B','CMDS', 'CMD', 'ATR', 'AV', 'REC', 'GD', 'GE', 'IRP', 'LC', 'AC', 'DC', 'DE', 'CDF', 'LP', 'DSQ', 'DSC',
-                       'DECL', 'TYPE', 'ATT', 'REP', 'ENQ', 'SE', 'SE_CONT', 'REL', 'REL\'', 'OP_REL', 'ADD', 'ADD\'', 'MUL', 'MUL\'', 'FACTOR', 'ID', 'NUM', 'TEXT', 'BOOL']
-    term_userdef = [
-        'inicio', 'fim', 'avancar', 'recuar', 'girar_direita', 'girar_esquerda', 'ir_para', 'levantar_caneta',
-        'abaixar_caneta', 'definir_cor', 'definir_espessura', 'cor_de_fundo', 'limpar_tela', 'desenhar_quadrado',
-        'desenhar_circulo', 'var', 'inteiro', 'texto', 'real', 'logico', '=', ';', ':', ',', 'repita', 'vezes', 'fim_repita',
-        'enquanto', 'faca', 'fim_enquanto', 'se', 'entao', 'senao', 'fim_se', '#',
-        '+', '-', '*', '/', '(', ')', '<=', '<', '>=', '>', '==', '!=', 'identificador', 'literal_texto',
-        'numero_int', 'numero_real', 'verdadeiro', 'falso'
-    ]
-    
-    code = source_code = """
-    inicio
-        var inteiro: lado;
-        var texto: cor;
-
-        lado = 5;
-        cor_de_fundo "black";
-        definir_espessura 2;
-
-        // Laço para desenhar a espiral
-        repita 50 vezes
-            definir_cor "cyan"; // Muda a cor da linha a cada iteração
-            
-            avancar lado;
-            girar_direita 90;
-
-            lado = lado + 5;
-        fim_repita;
-    fim
-    """
-    
-    sample_input_string = lista_tokens(code)
-     # Para usar: substitua parser.run() por:
-    parser = ASTParser(rules, nonterm_userdef, term_userdef, sample_input_string)
-    parser.computeAllFirsts()
-    parser.start_symbol = list(parser.diction.keys())[0]
-    parser.computeAllFollows()
-    table, result, tab_terms = parser.createParseTable()
-    ast_dict = parser.parse_with_ast(table, result, tab_terms, parser.sample_input_string)
-    print(ast_dict)  # Já é um dicionário Python pronto para uso

@@ -1,0 +1,24 @@
+inicio
+    var inteiro: lado;
+    var texto: cor;
+    var inteiro: tamanho_quadrado;
+    var texto: cor_de_fundo_quadrado;
+
+
+    lado = 10;
+    cor_de_fundo "black";
+    definir_espessura 2;
+
+    // Laço para desenhar a espiral
+    repita 50 vezes
+        definir_cor "cyan"; // Muda a cor da linha a cada iteração
+        avancar lado;
+        lado = lado + 5;
+    fim_repita;
+    
+    tamanho_quadrado = 100;
+    cor_de_fundo_quadrado = "red";
+    desenhar_quadrado tamanho_quadrado cor_de_fundo_quadrado;
+
+    desenhar_circulo 80 "cyan" "red";
+fim

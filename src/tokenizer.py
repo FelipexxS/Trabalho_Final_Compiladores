@@ -3,6 +3,14 @@ import re
 from enum import Enum
 
 #Tipos de tokens da nossa linguagem,
+class ScanError(Exception):
+    """Classe de exceção para erros léxicos."""
+    def __init__(self, message, line=None):
+        full_message = f"Erro Léxico"
+        if line:
+            full_message += f" (linha {line})"
+        full_message += f": {message}"
+        super().__init__(full_message)
 
 class TokenType(Enum):
 
@@ -22,6 +30,8 @@ class TokenType(Enum):
     LEVANTAR_CANETA = "levantar_caneta"
     ABAIXAR_CANETA = "abaixar_caneta"
     DEFINIR_COR = "definir_cor"
+    DESENHAR_QUADRADO = "desenhar_quadrado"
+    DESENHAR_CIRCULO = "desenhar_circulo"
     DEFINIR_ESPESSURA = "definir_espessura"
     COR_DE_FUNDO = "cor_de_fundo"
     LIMPAR_TELA = "limpar_tela"
@@ -40,7 +50,7 @@ class TokenType(Enum):
 
     # Identificadores e Literais
     IDENTIFICADOR = "IDENTIFICADOR"                 # nome de variável
-    NUMERO_INT = "NUMERO_INT"   # Ex: 100, 5
+    NUMERO_INTEIRO = "NUMERO_INTEIRO"   # Ex: 100, 5
     NUMERO_REAL = "NUMERO_REAL" # Ex: 144.0, 10.5
     LITERAL_TEXTO = "LITERAL_TEXTO" # Ex: "blue", "black"
 
@@ -63,9 +73,6 @@ class TokenType(Enum):
     # Fim do arquivo
     EOF = "EOF"
 
-
-# Uma classe simples para armazenar as informações de cada token:
-# o seu tipo (da Enum acima) e o seu valor literal (o texto original).
 class Token:
     def __init__(self, type, literal, line):
         self.type = type
@@ -74,9 +81,6 @@ class Token:
 
     def __repr__(self):
         return f"Token(type={self.type.name}, literal='{self.literal}', line={self.line})"
-
-
-# Classe main que fará a análise do código-fonte.
 
 class Tokenizer:
     def __init__(self, source_code):
@@ -93,8 +97,10 @@ class Tokenizer:
             "inicio": TokenType.INICIO,
             "fim": TokenType.FIM,
             "var": TokenType.VAR,
+            "número_inteiro": TokenType.INTEIRO,
             "inteiro": TokenType.INTEIRO,
             "texto": TokenType.TEXTO,
+            "número_real": TokenType.REAL,
             "real": TokenType.REAL,
             "logico": TokenType.LOGICO,
             "avancar": TokenType.AVANCAR,
@@ -105,6 +111,8 @@ class Tokenizer:
             "levantar_caneta": TokenType.LEVANTAR_CANETA,
             "abaixar_caneta": TokenType.ABAIXAR_CANETA,
             "definir_cor": TokenType.DEFINIR_COR,
+            "desenhar_quadrado": TokenType.DESENHAR_QUADRADO,
+            "desenhar_circulo": TokenType.DESENHAR_CIRCULO,
             "definir_espessura": TokenType.DEFINIR_ESPESSURA,
             "cor_de_fundo": TokenType.COR_DE_FUNDO,
             "limpar_tela": TokenType.LIMPAR_TELA,
@@ -171,7 +179,7 @@ class Tokenizer:
                 self.advance()
             return Token(TokenType.NUMERO_REAL, float(result), self.line)
         else:
-            return Token(TokenType.NUMERO_INT, int(result), self.line)
+            return Token(TokenType.NUMERO_INTEIRO, int(result), self.line)
 
     def identifier(self):
         """Reconhece identificadores (variáveis) e palavras-chave."""
@@ -194,7 +202,7 @@ class Tokenizer:
             self.advance()
         
         if self.current_char is None:
-            raise Exception(f"Erro Léxico: String não terminada na linha {self.line}")
+            raise ScanError(f"Erro Léxico: String não terminada na linha {self.line}")
 
         self.advance() # Pula a aspa final
         return Token(TokenType.LITERAL_TEXTO, result, self.line)
@@ -246,7 +254,7 @@ class Tokenizer:
                 # Se não for um token válido, lança um erro
                 char = self.current_char
                 self.advance()
-                raise Exception(f"Erro Léxico: Caractere inesperado '{char}' na linha {self.line}")
+                raise ScanError(f"Erro Léxico: Caractere inesperado '{char}' na linha {self.line}")
 
         # Se o loop terminar, chegamos ao fim do arquivo
         return Token(TokenType.EOF, None, self.line)
@@ -261,17 +269,35 @@ def lista_tokens(source_code):
     
     token = tokenizer.obter_next_token()
 
+    # Mapeamento de tokens pontuação/operadores para usar o literal (caractere) em vez do nome
+    literal_tokens = {
+        TokenType.ATRIBUICAO,
+        TokenType.DOIS_PONTOS,
+        TokenType.PONTO_VIRGULA,
+        TokenType.VIRGULA,
+        TokenType.SOMA,
+        TokenType.SUBTRACAO,
+        TokenType.MULTIPLICACAO,
+        TokenType.DIVISAO,
+        TokenType.RESTO,
+        TokenType.IGUAL,
+        TokenType.MENOR,
+        TokenType.MAIOR,
+        TokenType.PARENTESE_ESQ,
+        TokenType.PARENTESE_DIR,
+    }
+
     while token.type != TokenType.EOF:
-        classes_gram.append(token.type.name)
+        if token.type in literal_tokens:
+            classes_gram.append(str(token.literal))  # usa o caractere/literal do próprio token
+        else:
+            classes_gram.append(token.type.name.lower())  # usa o nome da classe gramatical
         token = tokenizer.obter_next_token()
     
     return " ".join(classes_gram)
 
 
-
-#Exemplo de código
-
-source_code = """
+code = """
     inicio
         var inteiro: lado;
         var texto: cor;
@@ -292,9 +318,12 @@ source_code = """
     fim
     """
 
-#Exemplo com retorno de tokens 
-
-tokens = lista_tokens(source_code)
-
+tokens = lista_tokens(code)
 
 print(tokens)
+
+
+
+
+
+
