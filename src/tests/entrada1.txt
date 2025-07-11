@@ -9,11 +9,7 @@ inicio
     // Laço para desenhar a espiral
     repita 50 vezes
         definir_cor "cyan"; // Muda a cor da linha a cada iteração
-        
         avancar lado;
-
-
-
         lado = lado + 5;
     fim_repita;
 fim

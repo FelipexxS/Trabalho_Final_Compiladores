@@ -78,39 +78,42 @@ class GeradorCodigoVisitor(NodeVisitor):
     self._add_linha(f"{var_name} = {expr_val}")
 
   def visit_REL(self, node):
-    lhs = self.visit(node['filhos'][0])
-    rhs_str = self.visit(node['filhos'][1])
-    return f"{lhs}{rhs_str}"
+    lhs = self.visit(node['filhos'][0]) or ""
+    rhs = self.visit(node['filhos'][1]) or ""
+    return f"{lhs}{rhs}"
     
   def visit_REL_prime(self, node):
     if not node.get('filhos'): return ""
-    op = node['filhos'][0]['filhos'][0]['valor']
-    rhs = self.visit(node['filhos'][1])
-    rest = self.visit(node['filhos'][2])
+    op = self.visit(node['filhos'][0]) or ""
+    rhs = self.visit(node['filhos'][1]) or ""
+    rest = self.visit(node['filhos'][2]) or ""
     return f" {op} {rhs}{rest}"
 
+  def visit_OP_REL(self, node):
+    return node['filhos'][0].get('valor', '')
+
   def visit_ADD(self, node):
-    lhs = self.visit(node['filhos'][0])
-    rhs_str = self.visit(node['filhos'][1])
-    return f"{lhs}{rhs_str}"
+    lhs = self.visit(node['filhos'][0]) or ""
+    rhs = self.visit(node['filhos'][1]) or ""
+    return f"{lhs}{rhs}"
     
   def visit_ADD_prime(self, node):
     if not node.get('filhos'): return ""
-    op = node['filhos'][0]['valor']
-    rhs = self.visit(node['filhos'][1])
-    rest = self.visit(node['filhos'][2])
+    op = node['filhos'][0].get('valor', '')
+    rhs = self.visit(node['filhos'][1]) or ""
+    rest = self.visit(node['filhos'][2]) or ""
     return f" {op} {rhs}{rest}"
 
   def visit_MUL(self, node):
-    lhs = self.visit(node['filhos'][0])
-    rhs_str = self.visit(node['filhos'][1])
-    return f"{lhs}{rhs_str}"
+    lhs = self.visit(node['filhos'][0]) or ""
+    rhs = self.visit(node['filhos'][1]) or ""
+    return f"{lhs}{rhs}"
 
   def visit_MUL_prime(self, node):
     if not node.get('filhos'): return ""
-    op = node['filhos'][0]['valor']
-    rhs = self.visit(node['filhos'][1])
-    rest = self.visit(node['filhos'][2])
+    op = node['filhos'][0].get('valor', '')
+    rhs = self.visit(node['filhos'][1]) or ""
+    rest = self.visit(node['filhos'][2]) or ""
     return f" {op} {rhs}{rest}"
 
   def visit_FACTOR(self, node):

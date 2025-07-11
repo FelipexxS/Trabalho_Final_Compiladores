@@ -381,6 +381,14 @@ class ASTParser(Parser):
         # Mapeia nome do token para o tipo de token literal do tokenizer
         token_map = {t.name.lower(): t for t in TokenType}
         
+        # ---------- FUNÇÃO AUXILIAR ----------
+        def _tag_ok(simbolo: str) -> str:
+            """
+            Converte nomes de não-terminais com apóstrofo para algo compatível
+            com identificadores Python.  Ex.:  ADD' -> ADD_prime
+            """
+            return simbolo.replace("'", "_prime")
+
         while stack:
             # ... (lógica inicial do loop) ...
             top = stack.pop(0)
@@ -428,9 +436,11 @@ class ASTParser(Parser):
                 rhs_symbols = [sym for sym in rhs_str.strip().split() if sym != '#']
 
                 # Atualiza o nó atual com a regra que está sendo aplicada
-                current_node.tag = lhs 
+                current_node.tag = _tag_ok(lhs)
                 
-                children_nodes = [ASTNode(tag=sym, linha=tok_obj.line) for sym in rhs_symbols]
+                children_nodes = [
+                    ASTNode(tag=_tag_ok(sym), linha=tok_obj.line) for sym in rhs_symbols
+                ]
                 current_node.children.extend(children_nodes)
 
                 stack = rhs_symbols + stack
