@@ -391,17 +391,27 @@ class ASTParser(Parser):
             tok_type_name = tok_obj.type.name.lower()
             
             # Mapeia token de pontuação para seu próprio literal
-            if tok_obj.type in {TokenType.ATRIBUICAO, TokenType.PONTO_VIRGULA, TokenType.DOIS_PONTOS}:
+            if tok_obj.type in {
+                TokenType.ATRIBUICAO, TokenType.PONTO_VIRGULA, TokenType.DOIS_PONTOS,
+                TokenType.VIRGULA, TokenType.SOMA, TokenType.SUBTRACAO,
+                TokenType.MULTIPLICACAO, TokenType.DIVISAO, TokenType.RESTO,
+                TokenType.IGUAL, TokenType.MENOR, TokenType.MAIOR,
+                TokenType.PARENTESE_ESQ, TokenType.PARENTESE_DIR
+            }:
                 tok_type_name = tok_obj.literal
+
+            if tok_obj.type == TokenType.EOF:
+                tok_type_name = '$'
 
             if top == '#':
                 continue
             elif top in self.term_userdef:
                 if top == tok_type_name:
-                    # Se for um terminal, cria um nó filho com seu valor
-                    child_node = ASTNode(tag=tok_type_name, linha=tok_obj.line, valor=tok_obj.literal)
+                    # Se for um terminal, atualiza o nó atual com seu valor e linha.
+                    # Nós terminais são folhas e não terão filhos.
                     if current_node:
-                       current_node.children.append(child_node)
+                       current_node.valor = tok_obj.literal
+                       current_node.linha = tok_obj.line
                     self.next_token()
                 else:
                     raise SyntaxError(f"Erro de Sintaxe: Esperado '{top}', mas encontrou '{tok_type_name}' na linha {tok_obj.line}")

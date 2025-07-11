@@ -3,14 +3,17 @@ from parser import ASTParser
 from semantico import SemanticAnalyzer, SemanticError
 import json
 from gerador import GeradorCodigoVisitor
+import os
 
 ENTRADA_1_CONTEUDO = None
+caminho_script = os.path.dirname(__file__)
+caminho_entrada = os.path.join(caminho_script, 'tests', 'entrada1.txt')
 
 try:
-  with open('D:\\Estudos-Projetos\\Projeto-Compiladores\\Trabalho_Final_Compiladores\\src\\tests\\entrada1.txt', 'r', encoding="utf-8") as arquivo:
+  with open(caminho_entrada, 'r', encoding="utf-8") as arquivo:
     ENTRADA_1_CONTEUDO = arquivo.read()
 except FileNotFoundError:
-  print("O arquivo não foi encontrado.")
+  print(f"O arquivo de entrada não foi encontrado em: {caminho_entrada}")
 except Exception as e:
   print(f"Ocorreu um erro: {e}")
 
@@ -112,3 +115,8 @@ gerador = GeradorCodigoVisitor()
 codigo_gerado = gerador.gerar_codigo(ast)
 print("\n--- Código Gerado ---")
 print(codigo_gerado)
+
+with open("D:\\Estudos-Projetos\\Projeto-Compiladores\\Trabalho_Final_Compiladores\\src\\tests\\saida_teste.py", "w", encoding="utf-8") as f:
+    f.write(codigo_gerado)
+
+print("\n Código salvo em 'tests/saida_teste.py'")

@@ -1,0 +1,18 @@
+inicio
+    var inteiro: lado;
+    var texto: cor;
+
+    lado = 10;
+    cor_de_fundo "black";
+    definir_espessura 2;
+
+    // Laço para desenhar a espiral
+    repita 50 vezes
+        definir_cor "cyan"; // Muda a cor da linha a cada iteração
+        
+        avancar lado;
+
+
+        lado = lado + 5;
+    fim_repita;
+fim
