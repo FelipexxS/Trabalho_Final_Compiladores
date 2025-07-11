@@ -3,6 +3,14 @@ import re
 from enum import Enum
 
 #Tipos de tokens da nossa linguagem,
+class ScanError(Exception):
+    """Classe de exceção para erros léxicos."""
+    def __init__(self, message, line=None):
+        full_message = f"Erro Léxico"
+        if line:
+            full_message += f" (linha {line})"
+        full_message += f": {message}"
+        super().__init__(full_message)
 
 class TokenType(Enum):
 
@@ -22,6 +30,8 @@ class TokenType(Enum):
     LEVANTAR_CANETA = "levantar_caneta"
     ABAIXAR_CANETA = "abaixar_caneta"
     DEFINIR_COR = "definir_cor"
+    DESENHAR_QUADRADO = "desenhar_quadrado"
+    DESENHAR_CIRCULO = "desenhar_circulo"
     DEFINIR_ESPESSURA = "definir_espessura"
     COR_DE_FUNDO = "cor_de_fundo"
     LIMPAR_TELA = "limpar_tela"
@@ -107,6 +117,8 @@ class Tokenizer:
             "levantar_caneta": TokenType.LEVANTAR_CANETA,
             "abaixar_caneta": TokenType.ABAIXAR_CANETA,
             "definir_cor": TokenType.DEFINIR_COR,
+            "desenhar_quadrado": TokenType.DESENHAR_QUADRADO,
+            "desenhar_circulo": TokenType.DESENHAR_CIRCULO,
             "definir_espessura": TokenType.DEFINIR_ESPESSURA,
             "cor_de_fundo": TokenType.COR_DE_FUNDO,
             "limpar_tela": TokenType.LIMPAR_TELA,
@@ -196,7 +208,7 @@ class Tokenizer:
             self.advance()
         
         if self.current_char is None:
-            raise Exception(f"Erro Léxico: String não terminada na linha {self.line}")
+            raise ScanError(f"Erro Léxico: String não terminada na linha {self.line}")
 
         self.advance() # Pula a aspa final
         return Token(TokenType.LITERAL_TEXTO, result, self.line)
@@ -248,7 +260,7 @@ class Tokenizer:
                 # Se não for um token válido, lança um erro
                 char = self.current_char
                 self.advance()
-                raise Exception(f"Erro Léxico: Caractere inesperado '{char}' na linha {self.line}")
+                raise ScanError(f"Erro Léxico: Caractere inesperado '{char}' na linha {self.line}")
 
         # Se o loop terminar, chegamos ao fim do arquivo
         return Token(TokenType.EOF, None, self.line)

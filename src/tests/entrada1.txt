@@ -12,4 +12,11 @@ inicio
         avancar lado;
         lado = lado + 5;
     fim_repita;
+    
+    tamanho_quadrado = 100;
+    lado_quadrado = 90;
+    cor_de_fundo_quadrado = "red";
+    desenhar_quadrado tamanho_quadrado lado_quadrado cor_de_fundo_quadrado;
+
+    desenhar_circulo 80 "cyan" "red";
 fim
